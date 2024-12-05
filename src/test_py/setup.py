@@ -19,7 +19,7 @@ setup(
                       'rclpy'],
     zip_safe=True,
     maintainer='root',
-    maintainer_email='thomas.fieguth@gmail.com',
+    maintainer_email='darius.kammawie@hotmail.com',
     description='arm segment mover',
     license='TODO: License declaration',
     tests_require=['pytest'],

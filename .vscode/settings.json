@@ -3,5 +3,6 @@
     "python.analysis.extraPaths": [
     "/opt/ros/humble/lib/python3.10/site-packages",
     "/workspace/install/lib/python3.10/site-packages"
-]
+],
+"cmake.sourceDirectory": "/home/darkam/Dokumente/TIAGoProWorkspace/src/test_cpp"
 }
