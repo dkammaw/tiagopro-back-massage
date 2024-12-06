@@ -21,7 +21,7 @@ class TappingActionClient(Node):
 
     def setup_goals(self):
         duration1 = Duration()
-        duration1.sec = 5
+        duration1.sec = 2
         duration1.nanosec = 0
 
         first_target = JointTrajectoryPoint()
@@ -63,7 +63,7 @@ class TappingActionClient(Node):
             return
 
         duration_tolerance = Duration()
-        duration_tolerance.sec = 1
+        duration_tolerance.sec = 5
         duration_tolerance.nanosec = 0
 
         target = self.goals[self.current_goal_index]

@@ -26,6 +26,7 @@ setup(
     entry_points={
         'console_scripts': [
             'tapping = trajectory.tapping:main',
+            'move = trajectory.move:main'
         ],
     },
 )
