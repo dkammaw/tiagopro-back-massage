@@ -8,8 +8,14 @@ def generate_launch_description():
     return LaunchDescription([
         Node(
             package="trajectory", 
-            executable="tapping", 
-            name="tapping",
+            executable="leftTapper", 
+            name="leftTapper",
             output="screen"
-         )
+         ),
+        Node(
+            package="trajectory", 
+            executable="rightTapper", 
+            name="rightTapper",
+            output="screen"
+        )
      ])

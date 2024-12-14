@@ -12,7 +12,7 @@ from trajectory_msgs.msg import (
     JointTrajectoryPoint,
 )
     
-'''class TappingActionClient(Node):
+class LeftTapper(Node):
     def __init__(self):
         super().__init__('arm_move_action_client')
         self.controller = '/arm_left_controller'
@@ -22,7 +22,7 @@ from trajectory_msgs.msg import (
 
     def setup_goals(self):
         duration1 = Duration()
-        duration1.sec = 2
+        duration1.sec = 5
         duration1.nanosec = 0
 
         first_target = JointTrajectoryPoint()
@@ -34,12 +34,12 @@ from trajectory_msgs.msg import (
             math.radians(-114),         #94             #0.35538,
             math.radians(-129),         #-125           #-2.0502,
             math.radians(-32),          #60             #0.10524,
-            math.radians(111),          #75             #-1.5976,
+            math.radians(105),          #75             #-1.5976,
             math.radians(-50)           #15             #1.57 
         ]
 
         duration2 = Duration()
-        duration2.sec = 5
+        duration2.sec = 7 # tapping velocity needs to be lower
         duration2.nanosec = 0
 
         second_target = JointTrajectoryPoint()
@@ -51,7 +51,7 @@ from trajectory_msgs.msg import (
             math.radians(-104),     
             math.radians(-108),   
             math.radians(-21),    
-            math.radians(87),    
+            math.radians(75),    
             math.radians(-43),     
         ]
 
@@ -119,16 +119,16 @@ from trajectory_msgs.msg import (
 def main(args=None):
     rclpy.init(args=args)
 
-    arm_action_client = TappingActionClient()
+    arm_action_client = LeftTapper()
     arm_action_client.setup_goals()  # Setup goals
     arm_action_client.send_goal()    # Start first movement
     rclpy.spin(arm_action_client)
 
 
 if __name__ == '__main__':
-    main()'''
+    main()
 
-class DualArmTappingActionClient(Node):
+'''class DualArmTappingActionClient(Node):
     def __init__(self):
         super().__init__('dual_arm_action_client')
 
@@ -309,4 +309,4 @@ def main(args=None):
 
 
 if __name__ == '__main__':
-    main()
+    main()'''

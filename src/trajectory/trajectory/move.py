@@ -10,7 +10,7 @@ class Move(Node):
         # Create a subscription to laser scan data
         self.scan_sub = self.create_subscription(
             LaserScan,
-            'scan',
+            '/scan_front_raw',
             self.sensor_callback,
             10
         )
@@ -24,7 +24,7 @@ class Move(Node):
         
         # Create a timer for controlling the robot's movement
         self.control_timer = self.create_timer(
-            0.1,  # 100 ms
+            0.05,  
             self.command_publisher
         )
         
@@ -37,7 +37,7 @@ class Move(Node):
         self.front = float('inf')  # Use 'inf' to represent no obstacle detected
         
         # Constants for distance thresholds
-        self.min_distance = 0.35
+        self.min_distance = 1.0
 
     def sensor_callback(self, msg: LaserScan):
         """
@@ -47,7 +47,9 @@ class Move(Node):
         ranges = msg.ranges
         if ranges:
             # Assuming the front is the center of the scan
-            self.front = min(ranges[len(ranges)//2 - 5 : len(ranges)//2 + 5])
+            # Expand range check for more robust detection
+            self.front = min(ranges[len(ranges)//2 - 150 : len(ranges)//2 + 150])
+
         else:
             self.front = float('inf')  # Default to no obstacle detected
 
@@ -56,7 +58,7 @@ class Move(Node):
         Control the robot's movement based on laser scan data.
         """
         # Default linear velocity
-        linear_vel = 0.075
+        linear_vel = 0.1
 
         # Stop the robot if an obstacle is detected within the threshold distance
         if self.front < self.min_distance:

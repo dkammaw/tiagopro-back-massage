@@ -25,8 +25,10 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'tapping = trajectory.tapping:main',
-            'move = trajectory.move:main'
+            'leftTapper = trajectory.left_tapper:main',
+            'rightTapper = trajectory.right_tapper:main',
+            'move = trajectory.move:main',
+            'relax = trajectory.relax:main'
         ],
     },
 )
