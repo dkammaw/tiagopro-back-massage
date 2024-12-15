@@ -3,7 +3,12 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-
+    #Node(
+            #package="trajectory", 
+            #executable="impedance_gain_adjuster", 
+            #name="impedance_gain_adjuster",
+            #output="screen"
+        #)
     # Create the launch description
     return LaunchDescription([
         Node(
@@ -19,3 +24,5 @@ def generate_launch_description():
             output="screen"
         )
      ])
+
+        

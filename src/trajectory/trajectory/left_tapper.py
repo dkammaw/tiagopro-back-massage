@@ -38,26 +38,43 @@ class LeftTapper(Node):
             math.radians(-50)           #15             #1.57 
         ]
 
+        # TARGET 2
         duration2 = Duration()
         duration2.sec = 7 # tapping velocity needs to be lower
         duration2.nanosec = 0
 
         second_target = JointTrajectoryPoint()
         second_target.time_from_start = duration2
-        second_target.positions = [
-            # tapping config    
-            math.radians(138),   
-            math.radians(-26),   
-            math.radians(-104),     
-            math.radians(-108),   
-            math.radians(-21),    
-            math.radians(75),    
-            math.radians(-43),     
-        ]
+        second_target.positions = self.tapping(first_target.positions)
+        
+        # TARGET 3
+        duration3 = Duration()
+        duration3.sec = 7 # tapping velocity needs to be lower
+        duration3.nanosec = 0
 
+        third_target = JointTrajectoryPoint()
+        third_target.time_from_start = duration2
+        third_target.positions = first_target.positions
+        
+        
         # Add targets to list
         self.goals.append(first_target)
         self.goals.append(second_target)
+        self.goals.append(third_target)
+        
+        
+    # Function to target positions for each tapping motion similarly 
+    def tapping(self, positions):
+        grad_changes = [-2, 7, 10, 21, 11, -30, 7]  # Updates in degrees
+        new_positions = []
+    
+        for i in range(len(positions)):
+            # Add Update in degrees to positions and convert back to radians
+            new_pos = positions[i] + math.radians(grad_changes[i])
+            new_positions.append(new_pos)
+    
+        return new_positions
+
 
     def send_goal(self):
         if self.current_goal_index ==  len(self.goals):

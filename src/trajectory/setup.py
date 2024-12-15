@@ -28,7 +28,9 @@ setup(
             'leftTapper = trajectory.left_tapper:main',
             'rightTapper = trajectory.right_tapper:main',
             'move = trajectory.move:main',
-            'relax = trajectory.relax:main'
+            'relax = trajectory.relax:main',
+            'sensor_ft = trajectory.sensor_ft:main',
+            'impedance_gain_adjuster = trajectory.impedance_control:main'
         ],
     },
 )
