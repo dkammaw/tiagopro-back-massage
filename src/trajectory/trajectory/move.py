@@ -1,3 +1,4 @@
+import subprocess
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
@@ -37,7 +38,10 @@ class Move(Node):
         self.front = float('inf')  # Use 'inf' to represent no obstacle detected
         
         # Constants for distance thresholds
-        self.min_distance = 1.0
+        self.min_distance = 0.75
+
+        # Variable to track if the nodes have been started
+        self.nodes_started = False
 
     def sensor_callback(self, msg: LaserScan):
         """
@@ -47,11 +51,20 @@ class Move(Node):
         ranges = msg.ranges
         if ranges:
             # Assuming the front is the center of the scan
-            # Expand range check for more robust detection
             self.front = min(ranges[len(ranges)//2 - 150 : len(ranges)//2 + 150])
-
         else:
             self.front = float('inf')  # Default to no obstacle detected
+
+    def start_lifter_node(self):
+        """
+        Start the additional nodes using a launch file.
+        """
+        try:
+            # Launch the file to start the other nodes
+            subprocess.Popen(['ros2', 'run', 'trajectory', 'torsoLifter'])
+            self.nodes_started = True  # Prevent multiple launches
+        except Exception as e:
+            self.get_logger().error(f"Failed to start nodes: {e}")
 
     def command_publisher(self):
         """
@@ -64,6 +77,8 @@ class Move(Node):
         if self.front < self.min_distance:
             linear_vel = 0.0
             self.get_logger().info(f"Obstacle detected at {self.front:.2f} meters. Stopping.")
+            if not self.nodes_started:
+                self.start_lifter_node()
         else:
             self.get_logger().info(f"Path is clear. Moving forward.")
 
@@ -97,6 +112,3 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-  
-            
-       

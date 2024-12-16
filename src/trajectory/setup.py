@@ -30,7 +30,8 @@ setup(
             'move = trajectory.move:main',
             'relax = trajectory.relax:main',
             'sensor_ft = trajectory.sensor_ft:main',
-            'impedance_gain_adjuster = trajectory.impedance_control:main'
+            'impedance_gain_adjuster = trajectory.impedance_control:main',
+            'torsoLifter = trajectory.torso_lifter:main',
         ],
     },
 )

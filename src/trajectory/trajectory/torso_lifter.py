@@ -1,3 +1,4 @@
+import subprocess
 import rclpy, time
 from rclpy.action import ActionClient
 from rclpy.node import Node
@@ -12,10 +13,10 @@ from trajectory_msgs.msg import (
     JointTrajectoryPoint,
 )
     
-class RightTapper(Node):
+class TorsoLifter(Node):
     def __init__(self):
-        super().__init__('arm_move_action_client')
-        self.controller = '/arm_right_controller'
+        super().__init__('torso_lift_action_client')
+        self.controller = '/torso_controller'
         self.action_client = ActionClient(self, FollowJointTrajectory, self.controller + "/follow_joint_trajectory")
         self.current_goal_index = 0
         self.goals = []  # list of targets
@@ -24,60 +25,37 @@ class RightTapper(Node):
         
         # TARGET 1
         duration1 = Duration()
-        duration1.sec = 2
+        duration1.sec = 5
         duration1.nanosec = 0
 
         first_target = JointTrajectoryPoint()
         first_target.time_from_start = duration1
-        first_target.positions = [
-            # initial massage config    #single arm     #home config
-            math.radians(-140),          #-70            #-1.8577,
-            math.radians(-33),           #-76            #-1.5916, 
-            math.radians(114),           #94             #0.35538,
-            math.radians(-129),          #-125           #-2.0502,
-            math.radians(32),            #60             #0.10524,
-            math.radians(105),           #75             #-1.5976,
-            math.radians(50)             #15             #1.57 
-        ]
+        first_target.positions = [0.33]  
 
         # TARGET 2
         duration2 = Duration()
-        duration2.sec = 4 # tapping velocity needs to be lower
+        duration2.sec = 5 
         duration2.nanosec = 0
 
         second_target = JointTrajectoryPoint()
         second_target.time_from_start = duration2
-        second_target.positions = self.tapping(first_target.positions)
-        
+        second_target.positions = [0.22]  
+
         # TARGET 3
         duration3 = Duration()
-        duration3.sec = 4 # tapping velocity needs to be lower
+        duration3.sec = 5
         duration3.nanosec = 0
 
         third_target = JointTrajectoryPoint()
-        third_target.time_from_start = duration2
-        third_target.positions = first_target.positions
-        
-        
+        third_target.time_from_start = duration3
+        third_target.positions = [0.11]  
+
         # Add targets to list
         self.goals.append(first_target)
         self.goals.append(second_target)
         self.goals.append(third_target)
         
-        
-    # Function to target positions for each tapping motion similarly 
-    def tapping(self, positions):
-        grad_changes = [2, 7, -10, 21, -11, -30, -7]  # Updates in degrees
-        new_positions = []
-    
-        for i in range(len(positions)):
-            # Add Update in degrees to positions and convert back to radians
-            new_pos = positions[i] + math.radians(grad_changes[i])
-            new_positions.append(new_pos)
-    
-        return new_positions
             
-
     def send_goal(self):
         if self.current_goal_index ==  len(self.goals):
             print("All movements completed!")
@@ -93,15 +71,7 @@ class RightTapper(Node):
         goal = FollowJointTrajectory.Goal()
         goal.trajectory.points.append(target)
         goal.goal_time_tolerance = duration_tolerance
-        goal.trajectory.joint_names = [
-            "arm_right_1_joint", # rotation shoulder-internal 
-            "arm_right_2_joint", # translation shoulder 
-            "arm_right_3_joint", # rotation upper-arm-internal
-            "arm_right_4_joint", # translation elbow 
-            "arm_right_5_joint", # rotation under-arm-internal
-            "arm_right_6_joint", # translation under-arm
-            "arm_right_7_joint"  # rotation gripper 
-        ]
+        goal.trajectory.joint_names = ["torso_lift_joint"]
 
         self.action_client.wait_for_server()
         self.send_goal_future = self.action_client.send_goal_async(
@@ -125,6 +95,10 @@ class RightTapper(Node):
         result = future.result().result
 
         print(f"Result for goal {self.current_goal_index + 1}: {result.error_code}")
+        
+        # Execute additional nodes after each goal
+        self.start_tapping_nodes()
+        
         self.current_goal_index += 1  # Switch to next goal
         self.send_goal()  # Start next movement
 
@@ -134,11 +108,24 @@ class RightTapper(Node):
         for i, position_error in enumerate(feedback.error.positions):
             print(f"Position error for joint {i + 1}: {position_error}")
 
-
+    def start_tapping_nodes(self):
+        """
+        Start the additional nodes using a launch file and wait for them to finish.
+        """
+        try:
+            # Launch the file to start the other nodes
+            print("Starting additional nodes...")
+            process = subprocess.Popen(['ros2', 'launch', 'trajectory', 'tapping.launch.py'])
+            process.wait()  # Wait for the process to finish
+            print("Additional nodes completed.")
+        except Exception as e:
+            self.get_logger().error(f"Failed to start nodes: {e}")
+            rclpy.shutdown()
+            
 def main(args=None):
     rclpy.init(args=args)
 
-    arm_action_client = RightTapper()
+    arm_action_client = TorsoLifter()
     arm_action_client.setup_goals()  # Setup goals
     arm_action_client.send_goal()    # Start first movement
     rclpy.spin(arm_action_client)

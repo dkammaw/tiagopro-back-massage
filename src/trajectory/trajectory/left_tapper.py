@@ -22,7 +22,7 @@ class LeftTapper(Node):
 
     def setup_goals(self):
         duration1 = Duration()
-        duration1.sec = 5
+        duration1.sec = 2
         duration1.nanosec = 0
 
         first_target = JointTrajectoryPoint()
@@ -40,7 +40,7 @@ class LeftTapper(Node):
 
         # TARGET 2
         duration2 = Duration()
-        duration2.sec = 7 # tapping velocity needs to be lower
+        duration2.sec = 4 # tapping velocity needs to be lower
         duration2.nanosec = 0
 
         second_target = JointTrajectoryPoint()
@@ -49,7 +49,7 @@ class LeftTapper(Node):
         
         # TARGET 3
         duration3 = Duration()
-        duration3.sec = 7 # tapping velocity needs to be lower
+        duration3.sec = 4 # tapping velocity needs to be lower
         duration3.nanosec = 0
 
         third_target = JointTrajectoryPoint()
