@@ -4,6 +4,7 @@ from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
 
+
 class Move(Node):
     def __init__(self):
         super().__init__('move_node')
@@ -25,7 +26,7 @@ class Move(Node):
         
         # Create a timer for controlling the robot's movement
         self.control_timer = self.create_timer(
-            0.05,  
+            0.05,  # 20 Hz control loop
             self.command_publisher
         )
         
@@ -36,24 +37,60 @@ class Move(Node):
         
         # Initialize variables for laser scan data
         self.front = float('inf')  # Use 'inf' to represent no obstacle detected
+        self.cluster_count = 0  # Count of clusters in front of the robot
         
         # Constants for distance thresholds
-        self.min_distance = 0.75
+        self.min_distance = 0.75  # Minimum distance to stop
+        self.cluster_threshold = 0.25  # Maximum gap between points in a cluster
+        self.cluster_min_points = 6  # Minimum points to consider a cluster valid
 
         # Variable to track if the nodes have been started
         self.nodes_started = False
 
     def sensor_callback(self, msg: LaserScan):
         """
-        Callback for processing LaserScan data. Updates the 'front' distance.
+        Callback for processing LaserScan data. Updates the 'front' distance and cluster count.
         """
-        # Calculate the range directly in front of the robot
         ranges = msg.ranges
         if ranges:
-            # Assuming the front is the center of the scan
-            self.front = min(ranges[len(ranges)//2 - 150 : len(ranges)//2 + 150])
+            # Define the front view range (e.g., +/- 150 points from center)
+            front_ranges = ranges[len(ranges)//2 - 150 : len(ranges)//2 + 150]
+
+            # Calculate the minimum distance in the front view
+            self.front = min(front_ranges) if front_ranges else float('inf')
+
+            # Detect clusters (e.g., chair legs or other narrow obstacles)
+            self.cluster_count = self.detect_clusters(front_ranges)
         else:
             self.front = float('inf')  # Default to no obstacle detected
+            self.cluster_count = 0
+
+    def detect_clusters(self, ranges):
+        """
+        Detect clusters of points in the given range data.
+
+        Args:
+            ranges (list): List of range data from the LaserScan message.
+
+        Returns:
+            int: Number of clusters detected.
+        """
+        clusters = 0
+        current_cluster_size = 0
+        
+        for i in range(1, len(ranges)):
+            if ranges[i] < float('inf') and abs(ranges[i] - ranges[i-1]) < self.cluster_threshold:
+                current_cluster_size += 1
+            else:
+                if current_cluster_size >= self.cluster_min_points:
+                    clusters += 1
+                current_cluster_size = 0
+
+        # Check the last cluster
+        if current_cluster_size >= self.cluster_min_points:
+            clusters += 1
+
+        return clusters
 
     def start_lifter_node(self):
         """
@@ -73,10 +110,10 @@ class Move(Node):
         # Default linear velocity
         linear_vel = 0.1
 
-        # Stop the robot if an obstacle is detected within the threshold distance
-        if self.front < self.min_distance:
+        # Stop the robot if an obstacle is detected within the threshold distance or clusters are found
+        if self.front < self.min_distance and self.cluster_count > 0:
             linear_vel = 0.0
-            self.get_logger().info(f"Obstacle detected at {self.front:.2f} meters. Stopping.")
+            self.get_logger().info(f"Obstacle detected at {self.front:.2f} meters or {self.cluster_count} clusters. Stopping.")
             if not self.nodes_started:
                 self.start_lifter_node()
         else:
@@ -88,7 +125,6 @@ class Move(Node):
 
         # Publish the velocity command
         self.cmd_pub.publish(self.cmd)
-
 
 def main(args=None):
     """
@@ -108,7 +144,6 @@ def main(args=None):
         # Shutdown the node
         move_node.destroy_node()
         rclpy.shutdown()
-
 
 if __name__ == '__main__':
     main()

@@ -30,7 +30,7 @@ class TorsoLifter(Node):
 
         first_target = JointTrajectoryPoint()
         first_target.time_from_start = duration1
-        first_target.positions = [0.33]  
+        first_target.positions = [0.24]  
 
         # TARGET 2
         duration2 = Duration()
@@ -39,7 +39,7 @@ class TorsoLifter(Node):
 
         second_target = JointTrajectoryPoint()
         second_target.time_from_start = duration2
-        second_target.positions = [0.22]  
+        second_target.positions = [0.18]  
 
         # TARGET 3
         duration3 = Duration()
@@ -48,7 +48,7 @@ class TorsoLifter(Node):
 
         third_target = JointTrajectoryPoint()
         third_target.time_from_start = duration3
-        third_target.positions = [0.11]  
+        third_target.positions = [0.12]  
 
         # Add targets to list
         self.goals.append(first_target)
