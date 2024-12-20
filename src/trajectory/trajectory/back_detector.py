@@ -79,7 +79,6 @@ class BackDetector(Node):
         if back_points is not None:
             self.get_logger().info(f"Detected back region with {len(back_points)} points.")
             # Visualize the detected back points in 3D (if you have matplotlib installed)
-            # self.visualize_back_points(back_points)
             self.calculate_tapping_positions(back_points)
             
         else:
@@ -150,98 +149,6 @@ class BackDetector(Node):
             self.get_logger().info("No points in the filtered range.")
 
         return filtered_points
-        
-
-
-
-    '''def calculate_tapping_positions(self, back_points):
-        """
-        Calculate six tapping positions directly on the detected back plane.
-        """
-        # Fit the back plane using PCA
-        plane_normal, plane_center = self.fit_plane_to_back(back_points)
-
-        # Generate tapping positions
-        tapping_positions = self.generate_points_on_plane(plane_normal, plane_center)
-
-        # Visualize the tapping positions
-        self.visualize_tapping_positions(back_points, tapping_positions)
-        self.get_logger().info(f"Tapping positions: {tapping_positions}")
-        return tapping_positions
-
-    def fit_plane_to_back(self, back_points):
-        """
-        Fit a plane to the back points using PCA.
-        :param back_points: Nx3 array of back points.
-        :return: Plane normal vector and plane center.
-        """
-        # Center the points around the mean
-        mean_point = np.mean(back_points, axis=0)
-        centered_points = back_points - mean_point
-
-        # Perform PCA to find the normal
-        pca = PCA(n_components=3)
-        pca.fit(centered_points)
-
-        normal_vector = pca.components_[-1]  # The last component is the plane normal
-        self.get_logger().info(f"Plane normal: {normal_vector}")
-        return normal_vector, mean_point
-
-    def generate_points_on_plane(self, normal_vector, plane_center):
-        """
-        Generate six tapping positions on the plane in a 3x2 grid.
-        """
-        # Define grid dimensions
-        row_spacing = 0.1  # Distance between rows
-        col_spacing = 0.05  # Distance between columns
-
-        # Create two orthogonal vectors to define the plane
-        basis_vector1 = np.cross(normal_vector, [1, 0, 0])
-        if np.linalg.norm(basis_vector1) == 0:
-            basis_vector1 = np.cross(normal_vector, [0, 1, 0])  # Handle edge case
-        basis_vector1 /= np.linalg.norm(basis_vector1)
-
-        basis_vector2 = np.cross(normal_vector, basis_vector1)
-        basis_vector2 /= np.linalg.norm(basis_vector2)
-
-        # Generate points in a 3x2 grid
-        tapping_positions = []
-        for row in range(3):  # 3 rows
-            for col in range(2):  # 2 columns
-                offset = (row - 1) * row_spacing * basis_vector2 + (col - 0.5) * col_spacing * basis_vector1
-                tapping_positions.append(plane_center + offset)
-
-        return np.array(tapping_positions)
-
-    def calculate_tapping_positions(self, back_points):
-        """
-        Calculate six tapping positions on the back in three rows:
-        - Each row has two points next to each other.
-        - Rows are aligned vertically, close to the centroid of the back points.
-        """
-        # Find the centroid of the back points (average position)
-        centroid = np.mean(back_points, axis=0)
-
-        # Define offsets for the rows
-        row_offsets = np.linspace(-0.1, 0.1, 3)  # Three rows, vertical offset (Y-axis)
-        col_offsets = [-0.05, 0.05]  # Two columns, horizontal offset (X-axis)
-
-        # Calculate tapping positions
-        tapping_positions = []
-        for row_offset in row_offsets:
-            for col_offset in col_offsets:
-                tapping_positions.append([
-                    centroid[0] + col_offset,  # X-coordinate (side-to-side)
-                    centroid[1] + row_offset,  # Y-coordinate (up-down/back height)
-                    centroid[2]               # Z-coordinate (depth)
-                ])
-
-        tapping_positions = np.array(tapping_positions)
-
-        # Visualize tapping positions
-        self.visualize_tapping_positions(back_points, tapping_positions)
-        self.get_logger().info(f"Tapping positions: {tapping_positions}")
-        return tapping_positions'''
         
     def calculate_tapping_positions(self, back_points):
         """
@@ -321,21 +228,6 @@ class BackDetector(Node):
         ax.legend()
         plt.show()
 
-
-    '''def visualize_back_points(self, back_points):
-        """
-        Visualize the detected back points in 3D using matplotlib.
-        """
-        import matplotlib.pyplot as plt
-        from mpl_toolkits.mplot3d import Axes3D
-
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.scatter(back_points[:, 0], back_points[:, 1], back_points[:, 2], c='r', marker='o')
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
-        plt.show()'''
 
 def main(args=None):
     rclpy.init(args=args)
