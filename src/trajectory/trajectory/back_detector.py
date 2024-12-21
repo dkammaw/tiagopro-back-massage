@@ -6,6 +6,8 @@ from cv_bridge import CvBridge
 import cv2
 from sklearn.decomposition import PCA
 import numpy as np
+from sklearn.cluster import DBSCAN
+from scipy.interpolate import griddata
 
 
 class BackDetector(Node):
@@ -50,9 +52,7 @@ class BackDetector(Node):
         ]))
         # Extract x, y, z fields into a simple array
         points = np.vstack((cloud_array['x'], cloud_array['y'], cloud_array['z'])).T
-        
-        # Downsampling
-        points = points[::5]  # Verarbeite jeden 5. Punkt
+
         return points
 
     def process_back_detection(self):
@@ -121,40 +121,78 @@ class BackDetector(Node):
 
         # Apply heuristic to extract back (e.g., points with vertical alignment)
         back_points = self.filter_vertical_points(self.point_cloud)
+        
+        # Select largest cluster (which is the Back)
+        back_points = self.get_largest_cluster(back_points)
+        
         return back_points
+    
+    
+    def get_largest_cluster(self, points):
 
-            
+        # Cluster the points
+        clustering = DBSCAN(eps=0.05, min_samples=10).fit(points)
+        labels = clustering.labels_
+
+        # Calculate the cluster sizes
+        unique_labels, counts = np.unique(labels, return_counts=True)
+
+        # Remove the label -1 (noise)
+        valid_counts = counts[unique_labels != -1]
+        valid_labels = unique_labels[unique_labels != -1]
+
+        # Check for valid clusters
+        if len(valid_counts) == 0:
+            self.get_logger().info("No valid clusters found.")
+            return np.array([])
+
+        # Find the largest cluster
+        largest_cluster_label = valid_labels[np.argmax(valid_counts)]
+        largest_cluster_points = points[labels == largest_cluster_label]
+
+        return largest_cluster_points
+
+          
     def filter_vertical_points(self, points):
         """
-        Identify points corresponding to the back by filtering vertical alignment.
+        Identify points corresponding to the back by filtering based on their alignment.
         """
-        # Assume back is between 0.5 and 1.5 meters from the robot
-        z_min = 0.5  # Min distance from robot (in meters)
-        z_max = 3.0  # Max distance from robot (in meters)
-
-        # Filter based on depth (z-coordinate)
+        # Define the ranges for filtering based on the assumed coordinate system:
+        # Z is height (vertical), Y is depth (front-back), X is width (side-to-side)
+        
+        z_min, z_max = 0.5, 3.0   # Height range (vertical, in meters) - adjust based on the expected back height
+        x_min, x_max = -0.5, 0.5  # Width range (side-to-side, in meters) - adjust based on the body width
+        y_min, y_max = 0.5, 3.0   # Depth range (front-back, in meters) - adjust based on the body depth
+        
+        # Filter based on height (z-coordinate)
         filtered_points = points[(points[:, 2] > z_min) & (points[:, 2] < z_max)]
 
-        # Optional: zusätzliche Filter für Höhe und Breite
-        x_min, x_max = -0.5, 0.5  # Begrenzung seitlich
-        y_min, y_max = 0.5, 2.0   # Begrenzung vertikal
+        # Additional filtering for width (x-coordinate) and depth (y-coordinate)
         filtered_points = filtered_points[
             (filtered_points[:, 0] > x_min) & (filtered_points[:, 0] < x_max) &
             (filtered_points[:, 1] > y_min) & (filtered_points[:, 1] < y_max)
         ]
-        # Log the range of filtered z values
+
+        # Logging for debugging
         if len(filtered_points) > 0:
-            self.get_logger().info(f"Filtered {len(filtered_points)} points for z: [{z_min}, {z_max}] and x/y ranges.")
+            x_range = (filtered_points[:, 0].min(), filtered_points[:, 0].max())
+            y_range = (filtered_points[:, 1].min(), filtered_points[:, 1].max())
+            z_range = (filtered_points[:, 2].min(), filtered_points[:, 2].max())
+            self.get_logger().info(
+                f"Filtered {len(filtered_points)} points. "
+                f"x range: {x_range}, y range: {y_range}, z range: {z_range}"
+            )
         else:
             self.get_logger().info("No points in the filtered range.")
 
         return filtered_points
+
+
+
         
     def calculate_tapping_positions(self, back_points):
         """
-        Calculate six tapping positions on the back in three rows:
-        - Each row has two points next to each other.
-        - Rows are aligned vertically, close to the centroid of the back points, on the back plane.
+        Calculate six tapping positions on the back that correspond to actual points in the back_points.
         """
         # Find the centroid of the back points
         centroid = np.mean(back_points, axis=0)
@@ -174,29 +212,40 @@ class BackDetector(Node):
         basis_vector1 /= np.linalg.norm(basis_vector1)
         basis_vector2 /= np.linalg.norm(basis_vector2)
 
+        # Project all back points onto the plane
+        back_points_on_plane = []
+        for point in back_points:
+            # Calculate the projection of the point onto the plane
+            vector_to_plane = point - centroid
+            distance_to_plane = np.dot(vector_to_plane, normal_vector)
+            projected_point = point - distance_to_plane * normal_vector
+            back_points_on_plane.append(projected_point)
+        back_points_on_plane = np.array(back_points_on_plane)
+
         # Define offsets for the rows and columns
         row_offsets = np.linspace(-0.1, 0.1, 3)  # Vertical offsets (three rows)
         col_offsets = [-0.05, 0.05]  # Horizontal offsets (two columns)
 
-        # Calculate tapping positions
+        # Calculate candidate tapping positions
         tapping_positions = []
         for row_offset in row_offsets:
             for col_offset in col_offsets:
                 offset = row_offset * basis_vector2 + col_offset * basis_vector1
-                tapping_positions.append(centroid + offset)
+                candidate_position = centroid + offset
+
+                # Find the closest back point on the plane
+                distances = np.linalg.norm(back_points_on_plane - candidate_position, axis=1)
+                closest_point_idx = np.argmin(distances)
+                tapping_positions.append(back_points[closest_point_idx])  # Use the original point
 
         tapping_positions = np.array(tapping_positions)
-
-        # Ensure points are on the plane (for verification)
-        for point in tapping_positions:
-            distance_to_plane = np.dot(point - centroid, normal_vector)
-            assert abs(distance_to_plane) < 1e-6, "Point not on the plane!"
 
         # Visualize tapping positions
         self.visualize_tapping_positions(back_points, tapping_positions)
         self.get_logger().info(f"Tapping positions: {tapping_positions}")
         return tapping_positions
 
+        
     def visualize_tapping_positions(self, back_points, tapping_positions):
         """
         Visualize the tapping positions in 3D along with the back points.
@@ -207,26 +256,33 @@ class BackDetector(Node):
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
 
-        # Plot back points
-        ax.scatter(back_points[:, 0], back_points[:, 1], back_points[:, 2], c='b', label='Back Points')
-
-        # Plot tapping positions
+        # Plot back points with lower z-order to ensure tapping positions are on top
         ax.scatter(
-            tapping_positions[:, 0], 
-            tapping_positions[:, 1], 
-            tapping_positions[:, 2], 
-            c='r', marker='o', s=100, label='Tapping Positions'
+            back_points[:, 0], back_points[:, 1], back_points[:, 2],
+            c='b', alpha=0.5, label='Back Points', zorder=1
+        )
+
+        # Plot tapping positions with larger markers and a higher z-order
+        ax.scatter(
+            tapping_positions[:, 0],
+            tapping_positions[:, 1],
+            tapping_positions[:, 2],
+            c='r', marker='o', s=200, label='Tapping Positions', zorder=2
         )
 
         # Annotate tapping positions
         for i, pos in enumerate(tapping_positions):
-            ax.text(pos[0], pos[1], pos[2], f'P{i+1}', color='red')
+            ax.text(
+                pos[0], pos[1], pos[2], f'P{i+1}',
+                color='red', fontsize=10, zorder=3
+            )
 
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
         ax.legend()
         plt.show()
+
 
 
 def main(args=None):
