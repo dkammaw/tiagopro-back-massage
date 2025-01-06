@@ -9,68 +9,84 @@ class MoveItIKExample(Node):
     def __init__(self):
         super().__init__('moveit_ik_example')
 
-        # Initialisiere Action Client für MoveGroup
+        # Initialize Action Client for MoveGroup
         self.move_group_client = ActionClient(self, MoveGroup, 'move_action')
 
         self.get_logger().info("Waiting for MoveGroup action server...")
         self.move_group_client.wait_for_server()
         self.get_logger().info("Connected to MoveGroup action server.")
 
+        # Initialize target_pose as None
+        self.target_pose = None
+
     def move_to_pose(self, x, y, z, roll, pitch, yaw):
-        # Zielpose erstellen
-        target_pose = PoseStamped()
-        target_pose.header.frame_id = "world"  # Passe den Frame an deinen Roboter an
-        target_pose.pose.position.x = x
-        target_pose.pose.position.y = y
-        target_pose.pose.position.z = z
+        # Create target pose
+        self.target_pose = PoseStamped()
+        self.target_pose.header.frame_id = "world"  # Adjust this frame to match your robot setup
+        self.target_pose.pose.position.x = x
+        self.target_pose.pose.position.y = y
+        self.target_pose.pose.position.z = z
 
-        # Eulerwinkel in Quaternion umwandeln
+        # Convert Euler angles to quaternion
         quat = self.euler_to_quaternion(roll, pitch, yaw)
-        target_pose.pose.orientation.x = quat[0]
-        target_pose.pose.orientation.y = quat[1]
-        target_pose.pose.orientation.z = quat[2]
-        target_pose.pose.orientation.w = quat[3]
+        self.target_pose.pose.orientation.x = quat[0]
+        self.target_pose.pose.orientation.y = quat[1]
+        self.target_pose.pose.orientation.z = quat[2]
+        self.target_pose.pose.orientation.w = quat[3]
 
-        # MoveGroup-Goal definieren
+        # Define MoveGroup Goal
         goal_msg = MoveGroup.Goal()
-        goal_msg.request.start_state.is_diff = False
-        goal_msg.request.goal_constraints.append(self.create_pose_constraint(target_pose))
+        goal_msg.request.group_name = "arm_left"  # Set to the planning group arm_left
+        goal_msg.request.start_state.is_diff = True
+        goal_msg.request.goal_constraints.append(self.create_pose_constraint(self.target_pose))
 
-        # Sende das Ziel an den MoveGroup-Action-Server zur Planung
+        # Send the goal to MoveGroup action server for planning
         self.get_logger().info("Planning to target pose...")
         result = self.move_group_client.send_goal_async(goal_msg)
-        
-        # Plan Callback hinzufügen
+
+        # Add plan callback
         result.add_done_callback(self.plan_callback)
 
     def plan_callback(self, future):
-        # Dies wird aufgerufen, wenn die Planung abgeschlossen ist
+        # This gets called when planning is complete
         result = future.result()
         if result:
             self.get_logger().info("Planning was successful.")
-            # Wenn die Planung erfolgreich war, starte die Bewegung
+            # If planning was successful, execute the movement
             self.execute_move()
         else:
             self.get_logger().error("Planning failed. Unable to reach the target pose.")
 
     def execute_move(self):
-        # Sende den Ausführungsbefehl und warte auf die Rückmeldung
+        # Send execution command and wait for feedback
         self.get_logger().info("Executing the planned move...")
+
+        if not self.target_pose:
+            self.get_logger().error("Target pose not set!")
+            return
+
+        # Define MoveGroup Goal with constraints or target pose
         goal_msg = MoveGroup.Goal()
+        goal_msg.request.group_name = "arm_left"  # Ensure consistent use of planning group
         goal_msg.request.start_state.is_diff = False
 
-        # Sende den Befehl an MoveGroup und warte auf die Rückmeldung
+        # Add the pose constraints again or use the target pose
+        goal_msg.request.goal_constraints.append(self.create_pose_constraint(self.target_pose))
+
+        # Send the command to MoveGroup and wait for feedback
         result = self.move_group_client.send_goal_async(goal_msg)
-        result.add_done_callback(self.move_callback)  # Callback nach der Bewegung
+        result.add_done_callback(self.move_callback)  # Callback after the movement
 
     def move_callback(self, future):
-        # Rückmeldung nach der Ausführung der Bewegung
+        # Feedback after movement execution
         result = future.result()
-        if result and result.status == 3:  # Erfolgreich abgeschlossen
-            self.get_logger().info("Movement executed successfully!")
+        if result:
+            if result.status == 3:  # Successfully completed
+                self.get_logger().info("Movement executed successfully!")
+            else:
+                self.get_logger().error(f"Movement failed with status: {result.status}")
         else:
-            self.get_logger().error("Movement failed.")
-
+            self.get_logger().error("Movement execution failed with no result.")
 
     def create_pose_constraint(self, pose_stamped):
         from moveit_msgs.msg import Constraints, PositionConstraint, OrientationConstraint
@@ -79,7 +95,7 @@ class MoveItIKExample(Node):
         # Position Constraint
         position_constraint = PositionConstraint()
         position_constraint.header = pose_stamped.header
-        position_constraint.link_name = "arm_right_6_link"  # Passe den Endeffektor-Link an
+        position_constraint.link_name = "arm_left_tool_link"  # Update to match the arm_left group end-effector
         position_constraint.target_point_offset.x = pose_stamped.pose.position.x
         position_constraint.target_point_offset.y = pose_stamped.pose.position.y
         position_constraint.target_point_offset.z = pose_stamped.pose.position.z
@@ -88,7 +104,7 @@ class MoveItIKExample(Node):
         # Orientation Constraint
         orientation_constraint = OrientationConstraint()
         orientation_constraint.header = pose_stamped.header
-        orientation_constraint.link_name = "arm_right_6_link"
+        orientation_constraint.link_name = "arm_left_tool_link"
         orientation_constraint.orientation = pose_stamped.pose.orientation
         orientation_constraint.absolute_x_axis_tolerance = 0.1
         orientation_constraint.absolute_y_axis_tolerance = 0.1
@@ -98,24 +114,27 @@ class MoveItIKExample(Node):
         return constraints
 
     def euler_to_quaternion(self, roll, pitch, yaw):
-        """Eulerwinkel (Roll, Pitch, Yaw) in Quaternion umwandeln."""
+        """Convert Euler angles (roll, pitch, yaw) to quaternion."""
         qx = math.sin(roll / 2) * math.cos(pitch / 2) * math.cos(yaw / 2) - math.cos(roll / 2) * math.sin(pitch / 2) * math.sin(yaw / 2)
         qy = math.cos(roll / 2) * math.sin(pitch / 2) * math.cos(yaw / 2) + math.sin(roll / 2) * math.cos(pitch / 2) * math.sin(yaw / 2)
         qz = math.cos(roll / 2) * math.cos(pitch / 2) * math.sin(yaw / 2) - math.sin(roll / 2) * math.sin(pitch / 2) * math.cos(yaw / 2)
         qw = math.cos(roll / 2) * math.cos(pitch / 2) * math.cos(yaw / 2) + math.sin(roll / 2) * math.sin(pitch / 2) * math.sin(yaw / 2)
         return [qx, qy, qz, qw]
 
+
 def main(args=None):
     rclpy.init(args=args)
     moveit_example = MoveItIKExample()
 
-    # Beispielzielposition und -orientierung
-    moveit_example.move_to_pose(0.763226, -0.413192, 0.350760, 1.570745, -0.497005, 2.792608)
-
+    # Example target position and orientation
+    #moveit_example.move_to_pose(0.763226, -0.413192, 0.350760, 1.570745, -0.497005, 2.792608)
+    moveit_example.move_to_pose(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
     rclpy.spin(moveit_example)
+
 
 if __name__ == '__main__':
     main()
+   
 
 
 
