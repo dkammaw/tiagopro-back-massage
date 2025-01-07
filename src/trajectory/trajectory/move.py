@@ -114,8 +114,8 @@ class Move(Node):
         if self.front < self.min_distance and self.cluster_count > 0:
             linear_vel = 0.0
             self.get_logger().info(f"Obstacle detected at {self.front:.2f} meters or {self.cluster_count} clusters. Stopping.")
-            if not self.nodes_started:
-                self.start_lifter_node()
+            #if not self.nodes_started:
+                #self.start_lifter_node()
         else:
             self.get_logger().info(f"Path is clear. Moving forward.")
 

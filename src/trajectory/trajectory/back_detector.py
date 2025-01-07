@@ -8,6 +8,7 @@ from sklearn.decomposition import PCA
 import numpy as np
 from sklearn.cluster import DBSCAN
 from scipy.interpolate import griddata
+from std_msgs.msg import Float32MultiArray
 
 
 class BackDetector(Node):
@@ -17,6 +18,9 @@ class BackDetector(Node):
         # Subscriptions
         self.create_subscription(PointCloud2, '/head_front_camera/depth/color/points', self.pointcloud_callback, 10)
         self.create_subscription(Image, '/head_front_camera/color/image_raw', self.image_callback, 10)
+        
+        # Publisher for tapping positions
+        self.tapping_positions_pub = self.create_publisher(Float32MultiArray, '/tapping_positions', 10)
 
         # OpenCV bridge
         self.bridge = CvBridge()
@@ -239,7 +243,12 @@ class BackDetector(Node):
                 tapping_positions.append(back_points[closest_point_idx])  # Use the original point
 
         tapping_positions = np.array(tapping_positions)
-
+        
+        # Publish tapping positions
+        tapping_msg = Float32MultiArray()
+        tapping_msg.data = tapping_positions.flatten().tolist()
+        self.tapping_positions_pub.publish(tapping_msg)
+        
         # Visualize tapping positions
         self.visualize_tapping_positions(back_points, tapping_positions)
         self.get_logger().info(f"Tapping positions: {tapping_positions}")

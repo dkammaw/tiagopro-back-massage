@@ -1,14 +1,20 @@
+import numpy as np
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
 from moveit_msgs.action import MoveGroup
 from rclpy.action import ActionClient
+from std_msgs.msg import Float32MultiArray
 import math
 
 class MoveItIKExample(Node):
     def __init__(self):
         super().__init__('moveit_ik_example')
-
+        
+        # Subscribe to tapping positions
+        self.create_subscription(Float32MultiArray, '/tapping_positions', self.tapping_positions_callback, 10)
+        self.get_logger().info("Subscribed to tapping positions topic.")
+        
         # Initialize Action Client for MoveGroup
         self.move_group_client = ActionClient(self, MoveGroup, 'move_action')
 
@@ -22,7 +28,7 @@ class MoveItIKExample(Node):
     def move_to_pose(self, x, y, z, roll, pitch, yaw):
         # Create target pose
         self.target_pose = PoseStamped()
-        self.target_pose.header.frame_id = "world"  # Adjust this frame to match your robot setup
+        self.target_pose.header.frame_id = "base_link" 
         self.target_pose.pose.position.x = x
         self.target_pose.pose.position.y = y
         self.target_pose.pose.position.z = z
@@ -81,13 +87,26 @@ class MoveItIKExample(Node):
         # Feedback after movement execution
         result = future.result()
         if result:
-            if result.status == 3:  # Successfully completed
+            if result.status == 2:  # Successfully completed
                 self.get_logger().info("Movement executed successfully!")
             else:
                 self.get_logger().error(f"Movement failed with status: {result.status}")
         else:
             self.get_logger().error("Movement execution failed with no result.")
+    
+    def tapping_positions_callback(self, msg):
+        """
+        Callback to process tapping positions and move the robot to each position.
+        """
+        positions = np.array(msg.data).reshape(-1, 3)  # Reshape into Nx3 array
+        self.get_logger().info(f"Received {len(positions)} tapping positions.")
 
+        # Move to each position sequentially
+        for pos in positions:
+            x, y, z = map(float, pos)  # Explicit casting
+            roll, pitch, yaw = 0.0, 0.0, 0.0  # Adjust orientation as needed
+            self.move_to_pose(x, y, z, roll, pitch, yaw)
+            
     def create_pose_constraint(self, pose_stamped):
         from moveit_msgs.msg import Constraints, PositionConstraint, OrientationConstraint
         constraints = Constraints()
@@ -120,16 +139,36 @@ class MoveItIKExample(Node):
         qz = math.cos(roll / 2) * math.cos(pitch / 2) * math.sin(yaw / 2) - math.sin(roll / 2) * math.sin(pitch / 2) * math.cos(yaw / 2)
         qw = math.cos(roll / 2) * math.cos(pitch / 2) * math.cos(yaw / 2) + math.sin(roll / 2) * math.sin(pitch / 2) * math.sin(yaw / 2)
         return [qx, qy, qz, qw]
+    
 
-
-def main(args=None):
+'''def main(args=None):
     rclpy.init(args=args)
     moveit_example = MoveItIKExample()
 
     # Example target position and orientation
-    #moveit_example.move_to_pose(0.763226, -0.413192, 0.350760, 1.570745, -0.497005, 2.792608)
-    moveit_example.move_to_pose(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
-    rclpy.spin(moveit_example)
+    moveit_example.move_to_pose(0.763226, -0.413192, 0.350760, 1.570745, -0.497005, 2.792608)
+    # moveit_example.move_to_pose(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    rclpy.spin(moveit_example)'''
+    
+def main(args=None):
+    rclpy.init(args=args)
+
+    # Create an instance of the MoveItIKExample node
+    moveit_example = MoveItIKExample()
+
+    # Log a message indicating readiness
+    moveit_example.get_logger().info("MoveIt IK Example node started.")
+    moveit_example.get_logger().info("Waiting for tapping positions...")
+
+    try:
+        # Spin the node to process callbacks
+        rclpy.spin(moveit_example)
+    except KeyboardInterrupt:
+        moveit_example.get_logger().info("Node interrupted by user.")
+    finally:
+        # Ensure proper shutdown
+        moveit_example.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == '__main__':

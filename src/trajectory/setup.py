@@ -32,8 +32,8 @@ setup(
             'sensor_ft = trajectory.sensor_ft:main',
             'impedance_gain_adjuster = trajectory.impedance_control:main',
             'torsoLifter = trajectory.torso_lifter:main',
-            'backDetector = trajectory.back_detector:main',
-            'armMove = trajectory.arm_move:main',
+            'back_detector = trajectory.back_detector:main',
+            'ik_solver = trajectory.ik_solver:main',
         ],
     },
 )
