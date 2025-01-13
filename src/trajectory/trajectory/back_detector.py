@@ -78,7 +78,7 @@ class BackDetector(Node):
         cv2.waitKey(1)
 
         # Extract depth points corresponding to the human
-        '''back_points = self.extract_back_from_pointcloud(human_mask)
+        back_points = self.extract_back_from_pointcloud(human_mask)
 
         if back_points is not None:
             self.get_logger().info(f"Detected back region with {len(back_points)} points.")
@@ -86,7 +86,7 @@ class BackDetector(Node):
             self.calculate_tapping_positions(back_points)
             
         else:
-            self.get_logger().info("No back points detected.")'''
+            self.get_logger().info("No back points detected.")
 
     def detect_human_from_rgb(self, image):
         """
@@ -138,6 +138,13 @@ class BackDetector(Node):
             self.get_logger().info("No point cloud data available.")
             return None
 
+        # Filter point cloud points using the human mask
+        filtered_points = self.mask_point_cloud(self.point_cloud, human_mask)
+
+        if len(filtered_points) == 0:
+            self.get_logger().info("No points corresponding to the human mask.")
+            return None
+        
         # Apply heuristic to extract back (e.g., points with vertical alignment)
         back_points = self.filter_vertical_points(self.point_cloud)
         
@@ -146,7 +153,42 @@ class BackDetector(Node):
         
         return back_points
 
-          
+
+    def mask_point_cloud(self, points, human_mask):
+        """
+        Filter point cloud to include only points corresponding to the human mask.
+        """
+        height, width = human_mask.shape
+        masked_points = []
+
+        # Camera intrinsic parameters (to be replaced with your actual values)
+        fx, fy = 500, 500  # Focal lengths
+        cx, cy = width / 2, height / 2  # Principal point
+
+        for point in points:
+            x, y, z = point
+
+            # Skip invalid points
+            if np.isnan(x) or np.isnan(y) or np.isnan(z) or np.isinf(x) or np.isinf(y) or np.isinf(z):
+                continue
+
+            # Skip points with z <= 0 (behind the camera)
+            if z <= 0:
+                continue
+
+            # Project the 3D point onto the 2D image plane
+            pixel_x = int((x / z) * fx + cx)
+            pixel_y = int((y / z) * fy + cy)
+
+            # Check if the projected point is within the image bounds
+            if 0 <= pixel_x < width and 0 <= pixel_y < height:
+                # Check if the point corresponds to the human mask
+                if human_mask[pixel_y, pixel_x] > 0:
+                    masked_points.append([x, y, z])
+
+        return np.array(masked_points)
+
+
     def filter_vertical_points(self, points):
         """
         Identify points corresponding to the back by filtering based on their alignment.
@@ -206,8 +248,9 @@ class BackDetector(Node):
         return largest_cluster_points
 
         
-        
+       
     ###########################################################################################################   
+        
         
     def calculate_tapping_positions(self, back_points):
         """
@@ -265,12 +308,12 @@ class BackDetector(Node):
         self.tapping_positions_pub.publish(tapping_msg)
         
         # Visualize tapping positions
-        self.visualize_tapping_positions(back_points, tapping_positions)
+        self.visualize_back(back_points, tapping_positions)
         self.get_logger().info(f"Tapping positions: {tapping_positions}")
         return tapping_positions
 
         
-    def visualize_tapping_positions(self, back_points, tapping_positions):
+    def visualize_back(self, back_points, tapping_positions):
         """
         Visualize the tapping positions in 3D along with the back points.
         """
