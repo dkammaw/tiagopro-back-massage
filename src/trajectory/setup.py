@@ -34,6 +34,8 @@ setup(
             'torsoLifter = trajectory.torso_lifter:main',
             'back_detector = trajectory.back_detector:main',
             'ik_solver = trajectory.ik_solver:main',
+            'rviz_visualizer = trajectory.rviz_visualizer:main',
+            'single_ik_solver = trajectory.single_ik_solver:main',
         ],
     },
 )

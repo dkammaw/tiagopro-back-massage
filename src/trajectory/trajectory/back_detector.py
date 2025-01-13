@@ -78,7 +78,7 @@ class BackDetector(Node):
         cv2.waitKey(1)
 
         # Extract depth points corresponding to the human
-        back_points = self.extract_back_from_pointcloud(human_mask)
+        '''back_points = self.extract_back_from_pointcloud(human_mask)
 
         if back_points is not None:
             self.get_logger().info(f"Detected back region with {len(back_points)} points.")
@@ -86,31 +86,46 @@ class BackDetector(Node):
             self.calculate_tapping_positions(back_points)
             
         else:
-            self.get_logger().info("No back points detected.")
+            self.get_logger().info("No back points detected.")'''
 
     def detect_human_from_rgb(self, image):
         """
-        Detect human in the RGB image.
-        This function uses simple segmentation (e.g., color range) as a placeholder.
-        Replace with advanced methods like OpenPose or YOLO for better results.
+        Detect human in the RGB image by combining skin and clothing segmentation.
         """
+        # Convert to HSV
         hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        lower_skin = np.array([0, 20, 70], dtype=np.uint8)
-        upper_skin = np.array([20, 255, 255], dtype=np.uint8)
-        mask = cv2.inRange(hsv_image, lower_skin, upper_skin)
 
-        # Perform morphological operations to clean the mask
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # Detect skin
+        lower_skin = np.array([0, 10, 60], dtype=np.uint8)
+        upper_skin = np.array([25, 150, 255], dtype=np.uint8)
+        skin_mask = cv2.inRange(hsv_image, lower_skin, upper_skin)
+
+        # Detect clothing (example: dark and light clothing ranges)
+        lower_clothes_dark = np.array([0, 0, 10], dtype=np.uint8)
+        upper_clothes_dark = np.array([180, 255, 50], dtype=np.uint8)
+
+        lower_clothes_light = np.array([0, 0, 200], dtype=np.uint8)
+        upper_clothes_light = np.array([180, 50, 255], dtype=np.uint8)
+
+        clothes_dark_mask = cv2.inRange(hsv_image, lower_clothes_dark, upper_clothes_dark)
+        clothes_light_mask = cv2.inRange(hsv_image, lower_clothes_light, upper_clothes_light)
+
+        # Combine masks
+        combined_mask = cv2.bitwise_or(skin_mask, clothes_dark_mask)
+        combined_mask = cv2.bitwise_or(combined_mask, clothes_light_mask)
+
+        # Morphological operations to clean up the mask
+        combined_mask = cv2.morphologyEx(combined_mask, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))
+        combined_mask = cv2.dilate(combined_mask, np.ones((5, 5), np.uint8), iterations=2)
+
+        # Find contours
+        contours, _ = cv2.findContours(combined_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if len(contours) == 0:
             return None
 
-        # Find the largest contour (assuming it's the human)
-        human_contour = max(contours, key=cv2.contourArea)
-
         # Create a mask for the detected human
-        human_mask = np.zeros_like(mask)
-        cv2.drawContours(human_mask, [human_contour], -1, 255, thickness=cv2.FILLED)
+        human_mask = np.zeros_like(combined_mask)
+        cv2.drawContours(human_mask, contours, -1, 255, thickness=cv2.FILLED)
 
         return human_mask
 
@@ -130,31 +145,6 @@ class BackDetector(Node):
         back_points = self.get_largest_cluster(back_points)
         
         return back_points
-    
-    
-    def get_largest_cluster(self, points):
-
-        # Cluster the points
-        clustering = DBSCAN(eps=0.05, min_samples=10).fit(points)
-        labels = clustering.labels_
-
-        # Calculate the cluster sizes
-        unique_labels, counts = np.unique(labels, return_counts=True)
-
-        # Remove the label -1 (noise)
-        valid_counts = counts[unique_labels != -1]
-        valid_labels = unique_labels[unique_labels != -1]
-
-        # Check for valid clusters
-        if len(valid_counts) == 0:
-            self.get_logger().info("No valid clusters found.")
-            return np.array([])
-
-        # Find the largest cluster
-        largest_cluster_label = valid_labels[np.argmax(valid_counts)]
-        largest_cluster_points = points[labels == largest_cluster_label]
-
-        return largest_cluster_points
 
           
     def filter_vertical_points(self, points):
@@ -191,8 +181,33 @@ class BackDetector(Node):
 
         return filtered_points
 
+    def get_largest_cluster(self, points):
 
+        # Cluster the points
+        clustering = DBSCAN(eps=0.05, min_samples=10).fit(points)
+        labels = clustering.labels_
 
+        # Calculate the cluster sizes
+        unique_labels, counts = np.unique(labels, return_counts=True)
+
+        # Remove the label -1 (noise)
+        valid_counts = counts[unique_labels != -1]
+        valid_labels = unique_labels[unique_labels != -1]
+
+        # Check for valid clusters
+        if len(valid_counts) == 0:
+            self.get_logger().info("No valid clusters found.")
+            return np.array([])
+
+        # Find the largest cluster
+        largest_cluster_label = valid_labels[np.argmax(valid_counts)]
+        largest_cluster_points = points[labels == largest_cluster_label]
+
+        return largest_cluster_points
+
+        
+        
+    ###########################################################################################################   
         
     def calculate_tapping_positions(self, back_points):
         """
@@ -302,5 +317,4 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-
 
