@@ -8,19 +8,30 @@ from sklearn.decomposition import PCA
 import numpy as np
 from sklearn.cluster import DBSCAN
 from scipy.interpolate import griddata
-from std_msgs.msg import Float32MultiArray
-
+from std_msgs.msg import Float32MultiArray, Header
+from sensor_msgs_py.point_cloud2 import create_cloud_xyz32
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
 class BackDetector(Node):
     def __init__(self):
         super().__init__('back_detector')
-
+        
+        # Define QoS profile for Best Effort (to match the publisher) ONLY for new software
+        qos_profile_best_effort = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,  # Match the publisher's QoS
+            history=HistoryPolicy.KEEP_LAST,
+            depth=5  # Depth must be the same as the publisher's
+        )
+        
         # Subscriptions
-        self.create_subscription(PointCloud2, '/head_front_camera/depth/color/points', self.pointcloud_callback, 10)
-        self.create_subscription(Image, '/head_front_camera/color/image_raw', self.image_callback, 10)
+        self.create_subscription(PointCloud2, '/head_front_camera/depth/color/points', self.pointcloud_callback, qos_profile_best_effort)
+        self.create_subscription(Image, '/head_front_camera/color/image_raw', self.image_callback, qos_profile_best_effort)
         
         # Publisher for tapping positions
         self.tapping_positions_pub = self.create_publisher(Float32MultiArray, '/tapping_positions', 10)
+
+        # Publisher for point cloud
+        self.back_points_pub = self.create_publisher(PointCloud2, '/filtered_cloud', 10)
 
         # OpenCV bridge
         self.bridge = CvBridge()
@@ -44,6 +55,20 @@ class BackDetector(Node):
         else:
             self.get_logger().info("No valid point cloud data received.")
 
+    def publish_processed_pointcloud(self, points):
+        """
+        Publish processed point cloud data (e.g., back points) for RViz.
+        """
+        header = Header()
+        header.stamp = self.get_clock().now().to_msg()
+        header.frame_id = 'base_link'  
+
+        # Create a PointCloud2 message
+        pointcloud_msg = create_cloud_xyz32(header, points.tolist())
+        self.back_points_pub.publish(pointcloud_msg)
+        self.get_logger().info("Published processed point cloud.")
+        
+
     def convert_pointcloud2_to_array(self, cloud_msg):
         """
         Convert PointCloud2 message to a simple NumPy array of points (x, y, z).
@@ -56,9 +81,35 @@ class BackDetector(Node):
         ]))
         # Extract x, y, z fields into a simple array
         points = np.vstack((cloud_array['x'], cloud_array['y'], cloud_array['z'])).T
+        
+        '''# Filter out invalid points (e.g., NaN, Inf)
+        points = points[~np.isnan(points).any(axis=1)]
+        points = points[~np.isinf(points).any(axis=1)]
 
+        # Apply voxel grid downsampling
+        voxel_size = 0.005  # Adjust this value for coarser or finer downsampling
+        
+        points = self.voxel_grid_filter(points, voxel_size)'''
+        
         return points
 
+    '''def voxel_grid_filter(self, points, voxel_size):
+        """
+        Downsample the point cloud using a voxel grid filter.
+        """
+        # Calculate voxel indices for each point
+        voxel_indices = np.floor(points / voxel_size).astype(np.int32)
+
+        # Use a dictionary to keep track of unique voxels
+        unique_voxels = {}
+        for i, voxel in enumerate(map(tuple, voxel_indices)):
+            unique_voxels[voxel] = i
+
+        # Get unique points based on voxel indices
+        unique_indices = list(unique_voxels.values())
+        return points[unique_indices]'''
+    
+    
     def process_back_detection(self):
         # Detect human using RGB image
         human_mask = self.detect_human_from_rgb(self.rgb_image)
@@ -76,17 +127,18 @@ class BackDetector(Node):
         # Visualize the human detection result
         cv2.imshow("Human Detection Mask", human_mask)
         cv2.waitKey(1)
-
+        '''
         # Extract depth points corresponding to the human
         back_points = self.extract_back_from_pointcloud(human_mask)
 
         if back_points is not None:
             self.get_logger().info(f"Detected back region with {len(back_points)} points.")
-            # Visualize the detected back points in 3D (if you have matplotlib installed)
+            # Publish the processed point cloud
+            self.publish_processed_pointcloud(back_points)
+            # Calculate tapping positions
             self.calculate_tapping_positions(back_points)
-            
         else:
-            self.get_logger().info("No back points detected.")
+            self.get_logger().info("No back points detected.")'''
 
     def detect_human_from_rgb(self, image):
         """
@@ -96,13 +148,13 @@ class BackDetector(Node):
         hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
         # Detect skin
-        lower_skin = np.array([0, 10, 60], dtype=np.uint8)
-        upper_skin = np.array([25, 150, 255], dtype=np.uint8)
+        lower_skin = np.array([0, 15, 40], dtype=np.uint8)
+        upper_skin = np.array([35, 170, 255], dtype=np.uint8)
         skin_mask = cv2.inRange(hsv_image, lower_skin, upper_skin)
 
         # Detect clothing (example: dark and light clothing ranges)
         lower_clothes_dark = np.array([0, 0, 10], dtype=np.uint8)
-        upper_clothes_dark = np.array([180, 255, 50], dtype=np.uint8)
+        upper_clothes_dark = np.array([180, 255, 40], dtype=np.uint8)
 
         lower_clothes_light = np.array([0, 0, 200], dtype=np.uint8)
         upper_clothes_light = np.array([180, 50, 255], dtype=np.uint8)
