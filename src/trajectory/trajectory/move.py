@@ -3,6 +3,7 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
+import math
 
 
 class Move(Node):
@@ -37,13 +38,10 @@ class Move(Node):
         
         # Initialize variables for laser scan data
         self.front = float('inf')  # Use 'inf' to represent no obstacle detected
-        self.cluster_count = 0  # Count of clusters in front of the robot
         
         # Constants for distance thresholds
-        self.min_distance = 0.75  # Minimum distance to stop
-        self.cluster_threshold = 0.25  # Maximum gap between points in a cluster
-        self.cluster_min_points = 6  # Minimum points to consider a cluster valid
-
+        self.min_distance = 0.9  # Minimum distance to stop
+        
         # Variable to track if the nodes have been started
         self.nodes_started = False
 
@@ -54,43 +52,14 @@ class Move(Node):
         ranges = msg.ranges
         if ranges:
             # Define the front view range (e.g., +/- 150 points from center)
-            front_ranges = ranges[len(ranges)//2 - 150 : len(ranges)//2 + 150]
-
+            front_ranges = ranges[len(ranges)//2 - 300 : len(ranges)//2 + 300]
+            # Filter out invalid range values (inf, -inf, nan)
+            valid_ranges = [r for r in front_ranges if not math.isinf(r) and not math.isnan(r)]
             # Calculate the minimum distance in the front view
-            self.front = min(front_ranges) if front_ranges else float('inf')
+            self.front = min(valid_ranges) if valid_ranges else float('inf')
 
-            # Detect clusters (e.g., chair legs or other narrow obstacles)
-            self.cluster_count = self.detect_clusters(front_ranges)
         else:
             self.front = float('inf')  # Default to no obstacle detected
-            self.cluster_count = 0
-
-    def detect_clusters(self, ranges):
-        """
-        Detect clusters of points in the given range data.
-
-        Args:
-            ranges (list): List of range data from the LaserScan message.
-
-        Returns:
-            int: Number of clusters detected.
-        """
-        clusters = 0
-        current_cluster_size = 0
-        
-        for i in range(1, len(ranges)):
-            if ranges[i] < float('inf') and abs(ranges[i] - ranges[i-1]) < self.cluster_threshold:
-                current_cluster_size += 1
-            else:
-                if current_cluster_size >= self.cluster_min_points:
-                    clusters += 1
-                current_cluster_size = 0
-
-        # Check the last cluster
-        if current_cluster_size >= self.cluster_min_points:
-            clusters += 1
-
-        return clusters
 
     def start_lifter_node(self):
         """
@@ -108,12 +77,12 @@ class Move(Node):
         Control the robot's movement based on laser scan data.
         """
         # Default linear velocity
-        linear_vel = 0.1
+        linear_vel = 0.3
 
         # Stop the robot if an obstacle is detected within the threshold distance or clusters are found
-        if self.front < self.min_distance and self.cluster_count > 0:
+        if self.front < self.min_distance: 
             linear_vel = 0.0
-            self.get_logger().info(f"Obstacle detected at {self.front:.2f} meters or {self.cluster_count} clusters. Stopping.")
+            self.get_logger().info(f"Obstacle detected at {self.front:.2f} meters. Stopping.")
             #if not self.nodes_started:
                 #self.start_lifter_node()
         else:
@@ -138,8 +107,6 @@ def main(args=None):
     try:
         # Spin the node to handle callbacks
         rclpy.spin(move_node)
-    except KeyboardInterrupt:
-        pass
     finally:
         # Shutdown the node
         move_node.destroy_node()
@@ -147,3 +114,4 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+

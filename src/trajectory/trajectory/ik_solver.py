@@ -112,7 +112,7 @@ class MoveItIKExample(Node):
         # Move to each position sequentially
         for index, pos in enumerate(positions):
             x, y, z = map(float, pos)  # Explicit casting
-            roll, pitch, yaw = 0.0, 0.0, 0.0  # Adjust orientation as needed
+            roll, pitch, yaw = math.pi / 2, 0, math.pi / 2  # fixed orientation
             
             # Plan and execute the move
             self.get_logger().info(f"Planning to position {index + 1}: x={x}, y={y}, z={z}")

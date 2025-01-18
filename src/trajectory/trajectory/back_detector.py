@@ -1,4 +1,5 @@
 import rclpy
+import subprocess
 from rclpy.node import Node
 from sensor_msgs.msg import Image, PointCloud2
 from sensor_msgs_py.point_cloud2 import read_points
@@ -40,6 +41,7 @@ class BackDetector(Node):
         self.rgb_image = None
         self.point_cloud = None
 
+
     def image_callback(self, msg):
         # Convert ROS Image message to OpenCV format
         self.rgb_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
@@ -51,9 +53,16 @@ class BackDetector(Node):
         if self.point_cloud is not None and len(self.point_cloud) > 0:
             self.get_logger().info(f"Received point cloud with {len(self.point_cloud)} points.")
             if self.rgb_image is not None:
-                self.process_back_detection()
+                self.process_back_detection() # alternatively only process human point cloud
         else:
             self.get_logger().info("No valid point cloud data received.")
+
+
+
+    # VISUAL RECOGNITION
+    ###############################################################################################
+
+
 
     def publish_processed_pointcloud(self, points):
         """
@@ -67,7 +76,7 @@ class BackDetector(Node):
         pointcloud_msg = create_cloud_xyz32(header, points.tolist())
         self.back_points_pub.publish(pointcloud_msg)
         self.get_logger().info("Published processed point cloud.")
-        
+           
 
     def convert_pointcloud2_to_array(self, cloud_msg):
         """
@@ -82,38 +91,11 @@ class BackDetector(Node):
         # Extract x, y, z fields into a simple array
         points = np.vstack((cloud_array['x'], cloud_array['y'], cloud_array['z'])).T
         
-        '''# Filter out invalid points (e.g., NaN, Inf)
-        points = points[~np.isnan(points).any(axis=1)]
-        points = points[~np.isinf(points).any(axis=1)]
-
-        # Apply voxel grid downsampling
-        voxel_size = 0.005  # Adjust this value for coarser or finer downsampling
-        
-        points = self.voxel_grid_filter(points, voxel_size)'''
-        
         return points
-
-    '''def voxel_grid_filter(self, points, voxel_size):
-        """
-        Downsample the point cloud using a voxel grid filter.
-        """
-        # Calculate voxel indices for each point
-        voxel_indices = np.floor(points / voxel_size).astype(np.int32)
-
-        # Use a dictionary to keep track of unique voxels
-        unique_voxels = {}
-        for i, voxel in enumerate(map(tuple, voxel_indices)):
-            unique_voxels[voxel] = i
-
-        # Get unique points based on voxel indices
-        unique_indices = list(unique_voxels.values())
-        return points[unique_indices]'''
     
-    
-    def process_back_detection(self):
-        # Detect human using RGB image
-        human_mask = self.detect_human_from_rgb(self.rgb_image)
-
+    '''
+    def visualize_human_mask(self, human_mask):
+        
         if human_mask is None:
             self.get_logger().info("No human detected in RGB image.")
             return
@@ -127,19 +109,10 @@ class BackDetector(Node):
         # Visualize the human detection result
         cv2.imshow("Human Detection Mask", human_mask)
         cv2.waitKey(1)
-        '''
-        # Extract depth points corresponding to the human
-        back_points = self.extract_back_from_pointcloud(human_mask)
-
-        if back_points is not None:
-            self.get_logger().info(f"Detected back region with {len(back_points)} points.")
-            # Publish the processed point cloud
-            self.publish_processed_pointcloud(back_points)
-            # Calculate tapping positions
-            self.calculate_tapping_positions(back_points)
-        else:
-            self.get_logger().info("No back points detected.")'''
-
+        
+        self.publish_processed_pointcloud(self.point_cloud)
+    '''
+        
     def detect_human_from_rgb(self, image):
         """
         Detect human in the RGB image by combining skin and clothing segmentation.
@@ -180,6 +153,31 @@ class BackDetector(Node):
         cv2.drawContours(human_mask, contours, -1, 255, thickness=cv2.FILLED)
 
         return human_mask
+  
+    
+    
+    # BACK PROCESSING
+    #########################################################################################################
+    
+    
+    
+    def process_back_detection(self):
+        # Detect human using RGB image
+        human_mask = self.detect_human_from_rgb(self.rgb_image)
+        
+        # self.visualize_human_mask(human_mask)
+        
+        # Extract depth points corresponding to the human
+        back_points = self.extract_back_from_pointcloud(human_mask)
+
+        if back_points is not None:
+            self.get_logger().info(f"Detected back region with {len(back_points)} points.")
+            # Publish the processed point cloud
+            self.publish_processed_pointcloud(back_points)
+            # Calculate tapping positions
+            self.calculate_tapping_positions(back_points)
+        else:
+            self.get_logger().info("No back points detected.")
 
 
     def extract_back_from_pointcloud(self, human_mask):
@@ -300,8 +298,10 @@ class BackDetector(Node):
         return largest_cluster_points
 
         
-       
+        
+    # TAPPING POSITIONS   
     ###########################################################################################################   
+        
         
         
     def calculate_tapping_positions(self, back_points):
