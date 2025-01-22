@@ -41,41 +41,12 @@ class MoveItIKExample(Node):
         goal_msg.request.goal_constraints.append(self.create_pose_constraint(self.target_pose))
 
         # Send the goal to MoveGroup action server for planning
-        self.get_logger().info("Planning to target pose...")
+        self.get_logger().info("Planning and executing to target pose...")
         result = self.move_group_client.send_goal_async(goal_msg)
 
         # Add plan callback
-        result.add_done_callback(self.plan_callback)
+        result.add_done_callback(self.move_callback)
 
-    def plan_callback(self, future):
-        # This gets called when planning is complete
-        result = future.result()
-        if result:
-            self.get_logger().info("Planning was successful.")
-            # If planning was successful, execute the movement
-            self.execute_move()
-        else:
-            self.get_logger().error("Planning failed. Unable to reach the target pose.")
-
-    def execute_move(self):
-        # Send execution command and wait for feedback
-        self.get_logger().info("Executing the planned move...")
-
-        if not self.target_pose:
-            self.get_logger().error("Target pose not set!")
-            return
-
-        # Define MoveGroup Goal with constraints or target pose
-        goal_msg = MoveGroup.Goal()
-        goal_msg.request.group_name = "arm_left"  # Ensure consistent use of planning group
-        goal_msg.request.start_state.is_diff = False
-
-        # Add the pose constraints again or use the target pose
-        goal_msg.request.goal_constraints.append(self.create_pose_constraint(self.target_pose))
-
-        # Send the command to MoveGroup and wait for feedback
-        result = self.move_group_client.send_goal_async(goal_msg)
-        result.add_done_callback(self.move_callback)  # Callback after the movement
 
     def move_callback(self, future):
         # Feedback after movement execution
@@ -87,6 +58,7 @@ class MoveItIKExample(Node):
                 self.get_logger().error(f"Movement failed with status: {result.status}")
         else:
             self.get_logger().error("Movement execution failed with no result.")
+
 
     def create_pose_constraint(self, pose_stamped):
         from moveit_msgs.msg import Constraints, PositionConstraint, OrientationConstraint
@@ -127,8 +99,7 @@ def main(args=None):
     moveit_example = MoveItIKExample()
 
     # Example target position and orientation
-    moveit_example.move_to_pose(0.763226, -0.413192, 0.350760, 1.570745, -0.497005, 2.792608)
-    # moveit_example.move_to_pose(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    moveit_example.move_to_pose(-0.058, 0.739, 0.392, 1.480, -0.511, 2.837)
     rclpy.spin(moveit_example)
 
 

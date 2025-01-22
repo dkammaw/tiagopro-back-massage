@@ -51,55 +51,23 @@ class MoveItIKExample(Node):
         goal_msg.request.goal_constraints.append(self.create_pose_constraint(self.target_pose))
 
         # Send the goal to MoveGroup action server for planning
-        self.get_logger().info("Planning to target pose...")
+        self.get_logger().info("Planning and executing to target pose...")
         result = self.move_group_client.send_goal_async(goal_msg)
 
         # Add plan callback
-        result.add_done_callback(self.plan_callback)
+        result.add_done_callback(self.move_callback)
 
-    def plan_callback(self, future):
-        # This gets called when planning is complete
-        result = future.result()
-        if result:
-            self.get_logger().info("Planning was successful.")
-            # If planning was successful, execute the movement
-            self.execute_move()
-        else:
-            self.get_logger().error("Planning failed. Unable to reach the target pose.")
-
-    def execute_move(self):
-        # Send execution command and wait for feedback
-        self.get_logger().info("Executing the planned move...")
-
-        if not self.target_pose:
-            self.get_logger().error("Target pose not set!")
-            return
-
-        # Define MoveGroup Goal with constraints or target pose
-        goal_msg = MoveGroup.Goal()
-        goal_msg.request.group_name = "arm_left"  # Ensure consistent use of planning group
-        goal_msg.request.start_state.is_diff = False
-
-        # Add the pose constraints again or use the target pose
-        goal_msg.request.goal_constraints.append(self.create_pose_constraint(self.target_pose))
-
-        # Send the command to MoveGroup and wait for feedback
-        result = self.move_group_client.send_goal_async(goal_msg)
-        result.add_done_callback(self.move_callback)  # Callback after the movement
 
     def move_callback(self, future):
         # Feedback after movement execution
         result = future.result()
         if result:
-            if result.status == 2:  # Successfully completed (check correct status code)
+            if result.status == 2:  # Successfully completed
                 self.get_logger().info("Movement executed successfully!")
-                self.movement_status = True
             else:
                 self.get_logger().error(f"Movement failed with status: {result.status}")
-                self.movement_status = True
         else:
             self.get_logger().error("Movement execution failed with no result.")
-            self.movement_status = False
 
     
     def tapping_positions_callback(self, msg):

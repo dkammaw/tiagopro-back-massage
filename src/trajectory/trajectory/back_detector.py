@@ -60,7 +60,7 @@ class BackDetector(Node):
 
 
     # VISUAL RECOGNITION
-    ###############################################################################################
+    #########################################################################################################
 
 
 
@@ -91,7 +91,26 @@ class BackDetector(Node):
         # Extract x, y, z fields into a simple array
         points = np.vstack((cloud_array['x'], cloud_array['y'], cloud_array['z'])).T
         
+        # Apply voxel grid downsampling
+        voxel_size = 0.014  # Adjust this value for coarser or finer downsampling
+        
+        points = self.voxel_grid_filter(points, voxel_size)
+        
         return points
+    
+    def voxel_grid_filter(self, points, voxel_size):
+        """
+        Downsample the point cloud using a voxel grid filter.
+        """
+        # Calculate voxel indices for each point
+        voxel_indices = np.floor(points / voxel_size).astype(np.int32)
+        # Use a dictionary to keep track of unique voxels
+        unique_voxels = {}
+        for i, voxel in enumerate(map(tuple, voxel_indices)):
+            unique_voxels[voxel] = i
+        # Get unique points based on voxel indices
+        unique_indices = list(unique_voxels.values())
+        return points[unique_indices]
     
     '''
     def visualize_human_mask(self, human_mask):
@@ -276,7 +295,7 @@ class BackDetector(Node):
     def get_largest_cluster(self, points):
 
         # Cluster the points
-        clustering = DBSCAN(eps=0.05, min_samples=10).fit(points)
+        clustering = DBSCAN(eps=0.05, min_samples=45).fit(points)
         labels = clustering.labels_
 
         # Calculate the cluster sizes
@@ -393,8 +412,9 @@ class BackDetector(Node):
         for i, pos in enumerate(tapping_positions):
             ax.text(
                 pos[0], pos[1], pos[2], f'P{i+1}',
-                color='red', fontsize=10, zorder=3
+                color='red', fontsize=14, fontweight='bold', zorder=3
             )
+
 
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
