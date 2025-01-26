@@ -12,6 +12,15 @@
   <depend>rclcpp</depend>
   <depend>moveit_ros_planning_interface</depend>
 
+  <depend>geometry_msgs</depend>
+  <depend>moveit_msgs</depend>
+  <depend>kinematics_interface</depend>
+
+  <depend>moveit_kinematics</depend>  
+  <depend>kdl_parser</depend>
+  <depend>orocos_kdl</depend>
+  <depend>pluginlib</depend>
+
   <exec_depend>control_msgs</exec_depend>
   <exec_depend>trajectory_msgs</exec_depend>
   

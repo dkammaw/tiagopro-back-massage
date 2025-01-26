@@ -20,6 +20,7 @@ find_package(trajectory_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
+find_package(moveit_msgs REQUIRED)
 
 
 # Find MoveIt2 dependencies
@@ -63,6 +64,24 @@ ament_target_dependencies(
     moveit_core
     tf2_ros
     moveit_ros_planning_interface
+
+)
+
+add_executable(redundancy_stepper src/redundancy_stepper.cpp)
+ament_target_dependencies(
+    redundancy_stepper 
+    rclcpp 
+    rclcpp_action
+    rclcpp_components
+    builtin_interfaces
+    geometry_msgs 
+    moveit_msgs
+    pluginlib
+    kdl_parser
+    orocos_kdl
+    moveit_core
+    std_msgs
+    moveit_ros_planning_interface
 )
 
 # Install executables
@@ -70,6 +89,7 @@ install(TARGETS
     facepalm
     scratch_calc
     manipulability
+    redundancy_stepper
     DESTINATION lib/${PROJECT_NAME}
 )
 
