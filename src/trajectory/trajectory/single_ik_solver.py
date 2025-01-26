@@ -3,6 +3,7 @@ from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
 from moveit_msgs.action import MoveGroup
 from rclpy.action import ActionClient
+from moveit_msgs.msg import RobotState
 import math
 
 class MoveItIKExample(Node):
@@ -15,7 +16,11 @@ class MoveItIKExample(Node):
         self.get_logger().info("Waiting for MoveGroup action server...")
         self.move_group_client.wait_for_server()
         self.get_logger().info("Connected to MoveGroup action server.")
-
+        
+        self.state2_pub= self.create_publisher(RobotState, 'robot_state_topic', 10)
+        # Initialize Planning Scene Monitor
+        # self.planning_scene_monitor = PlanningSceneMonitor(self)
+        
         # Initialize target_pose as None
         self.target_pose = None
 
@@ -39,15 +44,28 @@ class MoveItIKExample(Node):
         goal_msg.request.group_name = "arm_left"  # Set to the planning group arm_left
         goal_msg.request.start_state.is_diff = True
         goal_msg.request.goal_constraints.append(self.create_pose_constraint(self.target_pose))
-
+        
         # Send the goal to MoveGroup action server for planning
         self.get_logger().info("Planning and executing to target pose...")
         result = self.move_group_client.send_goal_async(goal_msg)
 
         # Add plan callback
         result.add_done_callback(self.move_callback)
+        
+        # Publish the start state (RobotState) directly as the RobotState message
+        self.state2_pub.publish(goal_msg.request.start_state)
 
-
+    '''def publishState(self):
+        # Retrieve the current robot state using PlanningSceneMonitor
+        with self.planning_scene_monitor.read_only() as scene:
+            robot_state = scene.current_state
+            self.get_logger().info("Current robot state retrieved.")
+            
+        # Publish the current state
+            robot_state_msg = RobotState()
+            robot_state_msg.joint_state = robot_state.joint_state
+            self.state2_pub.publish(robot_state_msg)'''
+            
     def move_callback(self, future):
         # Feedback after movement execution
         result = future.result()
@@ -97,7 +115,7 @@ class MoveItIKExample(Node):
 def main(args=None):
     rclpy.init(args=args)
     moveit_example = MoveItIKExample()
-
+    # moveit_example.publishState()
     # Example target position and orientation
     moveit_example.move_to_pose(-0.058, 0.739, 0.392, 1.480, -0.511, 2.837)
     rclpy.spin(moveit_example)
