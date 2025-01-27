@@ -5,6 +5,7 @@ from geometry_msgs.msg import PoseStamped
 from moveit_msgs.action import MoveGroup
 from rclpy.action import ActionClient
 from std_msgs.msg import Float32MultiArray
+from shape_msgs.msg import SolidPrimitive
 import math
 import time
 
@@ -32,7 +33,7 @@ class MoveItIKExample(Node):
     def move_to_pose(self, x, y, z, roll, pitch, yaw):
         # Create target pose
         self.target_pose = PoseStamped()
-        self.target_pose.header.frame_id = "base_link" 
+        self.target_pose.header.frame_id = "torso_lift_link" 
         self.target_pose.pose.position.x = x
         self.target_pose.pose.position.y = y
         self.target_pose.pose.position.z = z
@@ -122,9 +123,16 @@ class MoveItIKExample(Node):
         position_constraint = PositionConstraint()
         position_constraint.header = pose_stamped.header
         position_constraint.link_name = "arm_left_tool_link"  # Update to match the arm_left group end-effector
-        position_constraint.target_point_offset.x = pose_stamped.pose.position.x
-        position_constraint.target_point_offset.y = pose_stamped.pose.position.y
-        position_constraint.target_point_offset.z = pose_stamped.pose.position.z
+        # Define a constraint region as a box around the target position
+        region_primitive = SolidPrimitive()
+        region_primitive.type = SolidPrimitive.BOX
+        region_primitive.dimensions = [0.15, 0.01, 0.01]  # Tolerances: 1 cm x 1 cm x 1 cm
+
+        # Set the center of the region to the target pose's position
+        position_constraint.constraint_region.primitives.append(region_primitive)
+        position_constraint.constraint_region.primitive_poses.append(pose_stamped.pose)
+
+        # Append the PositionConstraint to constraints
         constraints.position_constraints.append(position_constraint)
 
         # Orientation Constraint

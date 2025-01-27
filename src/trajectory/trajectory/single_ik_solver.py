@@ -1,9 +1,10 @@
-'''import rclpy
+import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
 from moveit_msgs.action import MoveGroup
 from rclpy.action import ActionClient
 from moveit_msgs.msg import RobotState
+from shape_msgs.msg import SolidPrimitive
 import math
 
 class MoveItIKExample(Node):
@@ -25,7 +26,7 @@ class MoveItIKExample(Node):
     def move_to_pose(self, x, y, z, roll, pitch, yaw):
         # Create target pose
         self.target_pose = PoseStamped()
-        self.target_pose.header.frame_id = "base_link" 
+        self.target_pose.header.frame_id = "torso_lift_link" 
         self.target_pose.pose.position.x = x
         self.target_pose.pose.position.y = y
         self.target_pose.pose.position.z = z
@@ -71,9 +72,16 @@ class MoveItIKExample(Node):
         position_constraint = PositionConstraint()
         position_constraint.header = pose_stamped.header
         position_constraint.link_name = "arm_left_tool_link"  # Update to match the arm_left group end-effector
-        position_constraint.target_point_offset.x = pose_stamped.pose.position.x
-        position_constraint.target_point_offset.y = pose_stamped.pose.position.y
-        position_constraint.target_point_offset.z = pose_stamped.pose.position.z
+        # Define a constraint region as a box around the target position
+        region_primitive = SolidPrimitive()
+        region_primitive.type = SolidPrimitive.BOX
+        region_primitive.dimensions = [0.01, 0.01, 0.01]  # Tolerances: 1 cm x 1 cm x 1 cm
+
+        # Set the center of the region to the target pose's position
+        position_constraint.constraint_region.primitives.append(region_primitive)
+        position_constraint.constraint_region.primitive_poses.append(pose_stamped.pose)
+
+        # Append the PositionConstraint to constraints
         constraints.position_constraints.append(position_constraint)
 
         # Orientation Constraint
@@ -101,16 +109,16 @@ def main(args=None):
     rclpy.init(args=args)
     moveit_example = MoveItIKExample()
     # Example target position and orientation
-    moveit_example.move_to_pose(-0.058, 0.739, 0.392, 1.480, -0.511, 2.837)
+    moveit_example.move_to_pose(0.8, 0.0, 0.0, math.pi / 2, 0, math.pi / 2)
     rclpy.spin(moveit_example)
 
 
 if __name__ == '__main__':
-    main()'''
+    main()
   
     
     
-    
+'''    
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Pose
@@ -179,7 +187,7 @@ class MoveItIKExample(Node):
 
         # Position Constraint
         position_constraint = PositionConstraint()
-        position_constraint.link_name = "arm_left_tool_link"  # Update to match the arm_left group end-effector
+        position_constraint.link_name = "arm_left_7_link"  # Update to match the arm_left group end-effector
         position_constraint.target_point_offset.x = pose.position.x  # Fixed the error (removed .pose)
         position_constraint.target_point_offset.y = pose.position.y
         position_constraint.target_point_offset.z = pose.position.z
@@ -187,7 +195,7 @@ class MoveItIKExample(Node):
 
         # Orientation Constraint
         orientation_constraint = OrientationConstraint()
-        orientation_constraint.link_name = "arm_left_tool_link"
+        orientation_constraint.link_name = "arm_left_7_link"
         orientation_constraint.orientation = pose.orientation  # Fixed the error (removed .pose)
         orientation_constraint.absolute_x_axis_tolerance = 0.1
         orientation_constraint.absolute_y_axis_tolerance = 0.1
@@ -208,8 +216,8 @@ def main(args=None):
     rclpy.init(args=args)
     moveit_example = MoveItIKExample()
     # Example target position and orientation
-    moveit_example.move_to_pose(-0.058, 0.739, 0.392, math.pi / 2, 0, math.pi / 2)
+    moveit_example.move_to_pose(-0.05, -0.0434, -0.0322, math.pi / 2, 0, math.pi / 2)
     rclpy.spin(moveit_example)
 
 if __name__ == '__main__':
-    main()
+    main()'''
