@@ -8,10 +8,14 @@ def generate_launch_description():
     return LaunchDescription([
         Node(
             package='test_cpp',
-            executable='manipulability',
+            executable='redundancy_stepper',
+            name='redundancy_stepper',
             output='screen',
-            parameters=[
-                {'use_sim_time': True},  # Set use_sim_time for the node
-            ]
+        ),
+        Node(
+            package='trajectory',
+            executable='state_receiver',
+            name='state_receiver',
+            output='screen'
         )
     ])

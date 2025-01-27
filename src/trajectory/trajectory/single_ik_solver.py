@@ -1,4 +1,4 @@
-import rclpy
+'''import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
 from moveit_msgs.action import MoveGroup
@@ -106,12 +106,12 @@ def main(args=None):
 
 
 if __name__ == '__main__':
-    main()
+    main()'''
   
     
     
     
-'''import rclpy
+import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Pose
 from moveit_msgs.action import MoveGroup
@@ -208,8 +208,8 @@ def main(args=None):
     rclpy.init(args=args)
     moveit_example = MoveItIKExample()
     # Example target position and orientation
-    moveit_example.move_to_pose(-0.058, 0.739, 0.392, 1.480, -0.511, 2.837)
+    moveit_example.move_to_pose(-0.058, 0.739, 0.392, math.pi / 2, 0, math.pi / 2)
     rclpy.spin(moveit_example)
 
 if __name__ == '__main__':
-    main()'''
+    main()
