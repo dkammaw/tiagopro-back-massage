@@ -1,23 +1,28 @@
 import rclpy
-import subprocess
 from rclpy.node import Node
-from sensor_msgs.msg import Image, PointCloud2
-from sensor_msgs_py.point_cloud2 import read_points
+from sensor_msgs.msg import Image, PointCloud2, PointField
+from visualization_msgs.msg import Marker, MarkerArray
 from cv_bridge import CvBridge
 import cv2
 from sklearn.decomposition import PCA
 import numpy as np
 from sklearn.cluster import DBSCAN
-from scipy.interpolate import griddata
 from std_msgs.msg import Float32MultiArray, Header
 from sensor_msgs_py.point_cloud2 import create_cloud_xyz32
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
+from tf2_ros import Buffer, TransformListener
+from scipy.spatial.transform import Rotation
+from sensor_msgs_py import point_cloud2 as pc2
 
 class BackDetector(Node):
     def __init__(self):
         super().__init__('back_detector')
         
-        # Define QoS profile for Best Effort (to match the publisher) ONLY for new software
+        # TF2 buffer and listener
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+        
+        # Define QoS profile for Best Effort (to match the publisher)
         qos_profile_best_effort = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,  # Match the publisher's QoS
             history=HistoryPolicy.KEEP_LAST,
@@ -34,6 +39,9 @@ class BackDetector(Node):
         # Publisher for point cloud
         self.back_points_pub = self.create_publisher(PointCloud2, '/filtered_cloud', 10)
 
+        # Publisher for visualization markers
+        self.marker_publisher = self.create_publisher(MarkerArray, '/rviz_visual_tools', 10)
+
         # OpenCV bridge
         self.bridge = CvBridge()
 
@@ -47,16 +55,64 @@ class BackDetector(Node):
         self.rgb_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
 
     def pointcloud_callback(self, msg):
-        # Manually parse the PointCloud2 message
-        self.point_cloud = self.convert_pointcloud2_to_array(msg)
+        # Transform the point cloud to the base_link frame
+        try:
+            transform = self.tf_buffer.lookup_transform(
+                'base_link',  # Target frame
+                msg.header.frame_id,  # Source frame
+                rclpy.time.Time(),  # Time (use latest available)
+                timeout=rclpy.duration.Duration(seconds=1.0)
+            )
 
+            # Read the points from the PointCloud2 message and convert to numpy array
+            points_msg = pc2.read_points_numpy(msg)
+
+            # Create a new array with 4 columns (x, y, z, 1 for homogeneous)
+            points_map = np.hstack([points_msg, np.ones((points_msg.shape[0], 1))])
+
+            # Get the transform (rotation and translation)
+            rotation_matrix = Rotation.from_quat([
+                transform.transform.rotation.x,
+                transform.transform.rotation.y,
+                transform.transform.rotation.z,
+                transform.transform.rotation.w
+            ]).as_matrix()
+
+            translation_vector = np.array([transform.transform.translation.x,
+                                          transform.transform.translation.y,
+                                          transform.transform.translation.z])
+
+            # Apply the transform to the points
+            points_transformed = np.dot(points_map[:, :3], rotation_matrix.T) + translation_vector
+
+            # Create a new PointCloud2 message with the transformed points
+            fields = [
+                PointField(name="x", offset=0, datatype=PointField.FLOAT32, count=1),
+                PointField(name="y", offset=4, datatype=PointField.FLOAT32, count=1),
+                PointField(name="z", offset=8, datatype=PointField.FLOAT32, count=1),
+            ]
+            
+            pcl_map_header = msg.header
+            pcl_map_header.frame_id = "base_link"
+            
+            # Create the PointCloud2 message
+            pcl_map = pc2.create_cloud(pcl_map_header, fields, points_transformed)
+            self.back_points_pub.publish(pcl_map)
+
+            self.get_logger().info("Point cloud transformed and published.")
+        
+        except Exception as e:
+            self.get_logger().error(f"Failed to transform point cloud: {e}")
+
+
+        '''
         if self.point_cloud is not None and len(self.point_cloud) > 0:
-            self.get_logger().info(f"Received point cloud with {len(self.point_cloud)} points.")
+            self.get_logger().info(f"Received transformed point cloud with {len(self.point_cloud)} points.")
             if self.rgb_image is not None:
-                self.process_back_detection() # alternatively only process human point cloud
+                self.process_back_detection()
         else:
             self.get_logger().info("No valid point cloud data received.")
-
+        '''
 
 
     # VISUAL RECOGNITION
@@ -378,12 +434,49 @@ class BackDetector(Node):
         tapping_msg.data = tapping_positions.flatten().tolist()
         self.tapping_positions_pub.publish(tapping_msg)
         
+        # Publish markers for visualization in RViz
+        self.publish_markers(tapping_positions)
+        
         # Visualize tapping positions
         self.visualize_back(back_points, tapping_positions)
         self.get_logger().info(f"Tapping positions: {tapping_positions}")
         return tapping_positions
 
-        
+    def publish_markers(self, positions):
+        """
+        Publish RViz markers for the tapping positions.
+        """
+        marker_array = MarkerArray()
+        for i, pos in enumerate(positions):
+            marker = Marker()
+            marker.header.frame_id = "base_link"
+            marker.header.stamp = self.get_clock().now().to_msg()
+            marker.ns = "tapping_positions"
+            marker.id = i
+            marker.type = Marker.SPHERE
+            marker.action = Marker.ADD
+            marker.pose.position.x = float(pos[0])
+            marker.pose.position.y = float(pos[1])
+            marker.pose.position.z = float(pos[2])
+            marker.pose.orientation.x = 0.0
+            marker.pose.orientation.y = 0.0
+            marker.pose.orientation.z = 0.0
+            marker.pose.orientation.w = 1.0
+            marker.scale.x = 0.05  # Sphere diameter
+            marker.scale.y = 0.05
+            marker.scale.z = 0.05
+            marker.color.r = 0.0
+            marker.color.g = 1.0
+            marker.color.b = 0.0
+            marker.color.a = 1.0
+            marker_array.markers.append(marker)
+
+            # Log the position for the current marker
+            self.get_logger().info(f"Published marker {i} at position: x={pos[0]}, y={pos[1]}, z={pos[2]}")
+
+        # Publish the entire marker array
+        self.marker_publisher.publish(marker_array)
+    
     def visualize_back(self, back_points, tapping_positions):
         """
         Visualize the tapping positions in 3D along with the back points.
