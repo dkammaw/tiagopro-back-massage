@@ -37,8 +37,9 @@ class BackDetector(Node):
         self.tapping_positions_pub = self.create_publisher(Float32MultiArray, '/tapping_positions', 10)
 
         # Publisher for point cloud
-        self.back_points_pub = self.create_publisher(PointCloud2, '/filtered_cloud', 10)
-
+        self.back_cloud_pub = self.create_publisher(PointCloud2, '/filtered_cloud', 10)
+        self.human_cloud_pub = self.create_publisher(PointCloud2, '/filtered_cloud', 10)
+        
         # Publisher for visualization markers
         self.marker_publisher = self.create_publisher(MarkerArray, '/rviz_visual_tools', 10)
 
@@ -68,7 +69,7 @@ class BackDetector(Node):
             points_msg = pc2.read_points_numpy(msg)
 
             # Create a new array with 4 columns (x, y, z, 1 for homogeneous)
-            points_map = np.hstack([points_msg, np.ones((points_msg.shape[0], 1))])
+            points = np.hstack([points_msg, np.ones((points_msg.shape[0], 1))])
 
             # Get the transform (rotation and translation)
             rotation_matrix = Rotation.from_quat([
@@ -83,7 +84,7 @@ class BackDetector(Node):
                                           transform.transform.translation.z])
 
             # Apply the transform to the points
-            points_transformed = np.dot(points_map[:, :3], rotation_matrix.T) + translation_vector
+            points_transformed = np.dot(points[:, :3], rotation_matrix.T) + translation_vector
 
             # Create a new PointCloud2 message with the transformed points
             fields = [
@@ -92,27 +93,30 @@ class BackDetector(Node):
                 PointField(name="z", offset=8, datatype=PointField.FLOAT32, count=1),
             ]
             
-            pcl_map_header = msg.header
-            pcl_map_header.frame_id = "base_link"
+            pcl_header = msg.header
+            pcl_header.frame_id = "base_link"
             
             # Create the PointCloud2 message
-            pcl_map = pc2.create_cloud(pcl_map_header, fields, points_transformed)
-            self.back_points_pub.publish(pcl_map)
-
-            self.get_logger().info("Point cloud transformed and published.")
+            pcl_msg = pc2.create_cloud(pcl_header, fields, points_transformed)
+            
+            # Publish the PointCloud2 message to visualize Human Pointcloud only
+            # self.human_cloud_pub.publish(pcl_msg)
+            # self.get_logger().info("Point cloud transformed and published.")
+            
+            # Comment out the following lines to visualize Human Pointcloud only
+            self.point_cloud = self.convert_pointcloud2_to_array(pcl_msg)
         
         except Exception as e:
             self.get_logger().error(f"Failed to transform point cloud: {e}")
 
-
-        '''
+        
         if self.point_cloud is not None and len(self.point_cloud) > 0:
             self.get_logger().info(f"Received transformed point cloud with {len(self.point_cloud)} points.")
             if self.rgb_image is not None:
                 self.process_back_detection()
         else:
             self.get_logger().info("No valid point cloud data received.")
-        '''
+        
 
 
     # VISUAL RECOGNITION
@@ -130,7 +134,7 @@ class BackDetector(Node):
 
         # Create a PointCloud2 message
         pointcloud_msg = create_cloud_xyz32(header, points.tolist())
-        self.back_points_pub.publish(pointcloud_msg)
+        self.back_cloud_pub.publish(pointcloud_msg)
         self.get_logger().info("Published processed point cloud.")
            
 
