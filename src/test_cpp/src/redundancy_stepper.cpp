@@ -149,9 +149,10 @@ public:
     {
         // Target pose for inverse kinematics
         geometry_msgs::msg::Pose target_pose;
-        target_pose.position.x = 0.0;  // -0.058
-        target_pose.position.y = 0.0;  // 0.739
-        target_pose.position.z = 0.0;  // 0.392
+        target_pose.position.x = 0.058;  // -0.058
+        target_pose.position.y = 0.739;  // 0.739
+        target_pose.position.z = 0.392;  // 0.392
+        target_pose.orientation.w = 1.0;
 
         double timeout = 5.0; // 5 second timeout
         std::vector<double> consistency_limits(ik_seed_state.size(), 0.5);
