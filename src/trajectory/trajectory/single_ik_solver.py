@@ -26,7 +26,7 @@ class MoveItIKExample(Node):
     def move_to_pose(self, x, y, z, roll, pitch, yaw):
         # Create target pose
         self.target_pose = PoseStamped()
-        self.target_pose.header.frame_id = "torso_lift_link" 
+        self.target_pose.header.frame_id = "base_link" 
         self.target_pose.pose.position.x = x
         self.target_pose.pose.position.y = y
         self.target_pose.pose.position.z = z
@@ -109,7 +109,7 @@ def main(args=None):
     rclpy.init(args=args)
     moveit_example = MoveItIKExample()
     # Example target position and orientation
-    moveit_example.move_to_pose(0.8, 0.0, 0.0, math.pi / 2, 0, math.pi / 2)
+    moveit_example.move_to_pose(1.5, 0.2, 0.0, math.pi / 2, 0, math.pi / 2)
     rclpy.spin(moveit_example)
 
 
