@@ -1,117 +1,72 @@
-import subprocess
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
-from sensor_msgs.msg import LaserScan
-import math
+import time  # For time-based distance calculation
 
 
 class Move(Node):
     def __init__(self):
+        """
+        Initialize the Move node, which moves the robot forward exactly 0.9m 
+        and then stops.
+        """
         super().__init__('move_node')
         
-        # Create a subscription to laser scan data
-        self.scan_sub = self.create_subscription(
-            LaserScan,
-            '/scan_front_raw',
-            self.sensor_callback,
-            10
-        )
+        # Publisher for velocity commands
+        self.cmd_pub = self.create_publisher(Twist, 'cmd_vel', 5)
         
-        # Create a publisher for publishing velocity commands
-        self.cmd_pub = self.create_publisher(
-            Twist,
-            'cmd_vel',
-            5
-        )
+        # Timer for movement control (executed every 50 ms)
+        self.control_timer = self.create_timer(0.05, self.command_publisher)
         
-        # Create a timer for controlling the robot's movement
-        self.control_timer = self.create_timer(
-            0.05,  # 20 Hz control loop
-            self.command_publisher
-        )
-        
-        # Initialize the velocity command message
+        # Initialize velocity message
         self.cmd = Twist()
         self.cmd.linear.x = 0.0
         self.cmd.angular.z = 0.0
         
-        # Initialize variables for laser scan data
-        self.front = float('inf')  # Use 'inf' to represent no obstacle detected
-        
-        # Constants for distance thresholds
-        self.min_distance = 0.9  # Minimum distance to stop
-        
-        # Variable to track if the nodes have been started
-        self.nodes_started = False
+        # Distance settings
+        self.target_distance = 1.4  # Target distance in meters
+        self.speed = 0.3  # Speed in m/s
 
-    def sensor_callback(self, msg: LaserScan):
-        """
-        Callback for processing LaserScan data. Updates the 'front' distance and cluster count.
-        """
-        ranges = msg.ranges
-        if ranges:
-            # Define the front view range (e.g., +/- 150 points from center)
-            front_ranges = ranges[len(ranges)//2 - 300 : len(ranges)//2 + 300]
-            # Filter out invalid range values (inf, -inf, nan)
-            valid_ranges = [r for r in front_ranges if not math.isinf(r) and not math.isnan(r)]
-            # Calculate the minimum distance in the front view
-            self.front = min(valid_ranges) if valid_ranges else float('inf')
-
-        else:
-            self.front = float('inf')  # Default to no obstacle detected
-
-    def start_lifter_node(self):
-        """
-        Start the additional nodes using a launch file.
-        """
-        try:
-            # Launch the file to start the other nodes
-            subprocess.Popen(['ros2', 'run', 'trajectory', 'torsoLifter'])
-            self.nodes_started = True  # Prevent multiple launches
-        except Exception as e:
-            self.get_logger().error(f"Failed to start nodes: {e}")
+        # Time tracking for distance calculation
+        self.start_time = time.time()  # Record start time
+        self.traveled_distance = 0.0  # Initialize traveled distance
 
     def command_publisher(self):
         """
-        Control the robot's movement based on laser scan data.
+        Publishes velocity commands to move the robot forward and stops it after 0.9m.
         """
-        # Default linear velocity
-        linear_vel = 0.3
+        # Compute traveled distance based on time and speed
+        elapsed_time = time.time() - self.start_time  
+        self.traveled_distance = self.speed * elapsed_time  
 
-        # Stop the robot if an obstacle is detected within the threshold distance or clusters are found
-        if self.front < self.min_distance: 
-            linear_vel = 0.0
-            self.get_logger().info(f"Obstacle detected at {self.front:.2f} meters. Stopping.")
-            #if not self.nodes_started:
-                #self.start_lifter_node()
-        else:
-            self.get_logger().info(f"Path is clear. Moving forward.")
+        # Check if the robot has reached the target distance
+        if self.traveled_distance >= self.target_distance:  
+            self.cmd.linear.x = 0.0  # Stop immediately
+            self.cmd_pub.publish(self.cmd)  # Send stop command
+            self.get_logger().info(f"Target reached: {self.traveled_distance:.2f}m. Robot stopping.")
+            self.destroy_node()  # Shut down the node
+            return  
 
-        # Update the velocity command
-        self.cmd.linear.x = linear_vel
-        self.cmd.angular.z = 0.0  # Adjust angular velocity if needed
-
-        # Publish the velocity command
+        # Continue moving forward
+        self.cmd.linear.x = self.speed
         self.cmd_pub.publish(self.cmd)
+
 
 def main(args=None):
     """
-    Main function to initialize the ROS2 node and run the Move class.
+    Initializes the ROS2 node and starts the Move class.
     """
     rclpy.init(args=args)
-
-    # Create an instance of the Move class
     move_node = Move()
 
     try:
-        # Spin the node to handle callbacks
         rclpy.spin(move_node)
     finally:
-        # Shutdown the node
         move_node.destroy_node()
         rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
+
+
 

@@ -108,8 +108,8 @@ class MoveItIKExample(Node):
 def main(args=None):
     rclpy.init(args=args)
     moveit_example = MoveItIKExample()
-    # Example target position and orientation
-    moveit_example.move_to_pose(1.5, 0.2, 0.0, math.pi / 2, 0, math.pi / 2)
+    # Example target position and orientation (-0.8)
+    moveit_example.move_to_pose(0.51, -0.01, 0.81, math.pi / 2, 0, math.pi / 2)
     rclpy.spin(moveit_example)
 
 

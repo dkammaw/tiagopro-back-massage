@@ -395,6 +395,8 @@ class BackDetector(Node):
                 tapping_positions.append(back_points[closest_point_idx])  # Use the original point
 
         tapping_positions = np.array(tapping_positions)
+        # Subtract 1 from the x-coordinate of each tapping position to transform in correct frame
+        tapping_positions[:, 0] -= 1
         
         # Publish tapping positions
         tapping_msg = Float32MultiArray()
@@ -409,6 +411,11 @@ class BackDetector(Node):
         self.get_logger().info(f"Tapping positions: {tapping_positions}")
         return tapping_positions
 
+
+    # VISUALIZATION
+    #################################################################################################
+    
+    
     def publish_markers(self, positions):
         """
         Publish RViz markers for the tapping positions.
