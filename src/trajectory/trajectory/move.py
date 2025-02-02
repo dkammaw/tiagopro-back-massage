@@ -24,7 +24,7 @@ class Move(Node):
         self.cmd.angular.z = 0.0
         
         # Distance settings
-        self.target_distance = 1.4  # Target distance in meters
+        self.target_distance = 1.9  # Target distance in meters
         self.speed = 0.3  # Speed in m/s
 
         # Time tracking for distance calculation

@@ -25,6 +25,7 @@ find_package(moveit_msgs REQUIRED)
 
 # Find MoveIt2 dependencies
 find_package(moveit_core REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 # Existing executables
 add_executable(facepalm src/facepalm.cpp)
@@ -84,12 +85,30 @@ ament_target_dependencies(
     moveit_ros_planning_interface
 )
 
+add_executable(nullspace_explorer src/nullspace_explorer.cpp)
+ament_target_dependencies(
+    nullspace_explorer
+    rclcpp 
+    rclcpp_action
+    rclcpp_components
+    builtin_interfaces
+    geometry_msgs 
+    moveit_msgs
+    pluginlib
+    kdl_parser
+    orocos_kdl
+    moveit_core
+    std_msgs
+    moveit_ros_planning_interface
+)
+
 # Install executables
 install(TARGETS
     facepalm
     scratch_calc
     manipulability
     redundancy_stepper
+    nullspace_explorer
     DESTINATION lib/${PROJECT_NAME}
 )
 

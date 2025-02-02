@@ -6,7 +6,7 @@ from moveit_msgs.action import MoveGroup
 from rclpy.action import ActionClient
 from std_msgs.msg import Float32MultiArray
 from shape_msgs.msg import SolidPrimitive
-from visualization_msgs.msg import Marker, MarkerArray
+from visualization_msgs.msg import MarkerArray
 import math
 import time
 import subprocess

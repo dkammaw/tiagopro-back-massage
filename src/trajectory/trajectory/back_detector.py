@@ -105,8 +105,8 @@ class BackDetector(Node):
         
         if self.point_cloud is not None and len(self.point_cloud) > 0:
             self.get_logger().info(f"Received transformed point cloud with {len(self.point_cloud)} points.")
-            if self.human_mask is not None:
-                self.filter_points_by_human_mask()
+            # if self.human_mask is not None:
+                 # self.filter_points_by_human_mask()
             #self.publish_processed_pointcloud(self.point_cloud)
             self.process_back_detection()
         else:
@@ -116,7 +116,7 @@ class BackDetector(Node):
     def image_callback(self, msg):
         # Convert ROS Image message to OpenCV format
         self.rgb_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-        self.detect_human_from_rgb(self.rgb_image)
+        # self.detect_human_from_rgb(self.rgb_image)
               
 
 
@@ -245,8 +245,11 @@ class BackDetector(Node):
     
     def process_back_detection(self):
         
-        # Extract depth points corresponding to the human
-        back_points = self.extract_back_from_pointcloud()
+        # Apply heuristic to extract back (e.g., points with vertical alignment)
+        back_points = self.filter_vertical_points(self.point_cloud)
+        
+        # Select largest cluster (which is the Back)
+        back_points = self.get_largest_cluster(back_points)
 
         if back_points is not None:
             self.get_logger().info(f"Detected back region with {len(back_points)} points.")
@@ -256,23 +259,6 @@ class BackDetector(Node):
             self.calculate_tapping_positions(back_points)
         else:
             self.get_logger().info("No back points detected.")
-
-
-    def extract_back_from_pointcloud(self):
-        """
-        Extract 3D points corresponding to the human's back.
-        """
-        if self.point_cloud is None or len(self.point_cloud) == 0:
-            self.get_logger().info("No point cloud data available.")
-            return None
-        
-        # Apply heuristic to extract back (e.g., points with vertical alignment)
-        back_points = self.filter_vertical_points(self.point_cloud)
-        
-        # Select largest cluster (which is the Back)
-        back_points = self.get_largest_cluster(back_points)
-        
-        return back_points
 
 
     def filter_vertical_points(self, points):
@@ -395,6 +381,7 @@ class BackDetector(Node):
                 tapping_positions.append(back_points[closest_point_idx])  # Use the original point
 
         tapping_positions = np.array(tapping_positions)
+        
         # Subtract 1 from the x-coordinate of each tapping position to transform in correct frame
         tapping_positions[:, 0] -= 1
         
@@ -407,7 +394,7 @@ class BackDetector(Node):
         self.publish_markers(tapping_positions)
         
         # Visualize tapping positions
-        self.visualize_back(back_points, tapping_positions)
+        # self.visualize_back(back_points, tapping_positions)
         self.get_logger().info(f"Tapping positions: {tapping_positions}")
         return tapping_positions
 
