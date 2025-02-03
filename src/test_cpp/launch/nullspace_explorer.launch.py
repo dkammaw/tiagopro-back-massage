@@ -8,8 +8,8 @@ def generate_launch_description():
     return LaunchDescription([
         Node(
             package='test_cpp',
-            executable='redundancy_stepper',
-            name='redundancy_stepper',
+            executable='nullspace_explorer',
+            name='nullspace_explorer',
             output='screen',
         ),
         Node(
