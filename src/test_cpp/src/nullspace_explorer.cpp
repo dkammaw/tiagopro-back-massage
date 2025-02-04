@@ -149,9 +149,12 @@ Eigen::VectorXd exploreNullspace(moveit::core::RobotState& robot_state,
             //std::vector<double> new_config_vec(new_config.data(), new_config.data() + new_config.size());
             //robot_state.setVariablePositions(new_config_vec);
             robot_state.setVariablePositions(new_config.data());
+            const std::vector<double>& joint_positions = robot_state.getVariablePositions();
+            RCLCPP_INFO_STREAM(rclcpp::get_logger("nullspace_exploration"), "New_config_positions: \n" << joint_positions);
 
             robot_state.updateLinkTransforms();
             bool new_success = kinematics_metrics->getManipulabilityIndex(robot_state, jmg, manipulability_index, false);
+            RCLCPP_INFO(rclcpp::get_logger("nullspace_exploration"), "Current Manipulability Index: %f", manipulability_index);
             if (!new_success)
                 continue;
 
