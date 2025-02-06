@@ -36,7 +36,8 @@ setup(
             'ik_solver = trajectory.ik_solver:main',
             'rviz_visualizer = trajectory.rviz_visualizer:main',
             'single_ik_solver = trajectory.single_ik_solver:main',
-            'state_receiver = trajectory.state_receiver:main'
+            'state_receiver = trajectory.state_receiver:main',
+            'fk_solver = trajectory.fk_solver:main'
         ],
     },
 )

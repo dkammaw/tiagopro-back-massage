@@ -37,7 +37,7 @@ class LeftTapper(Node):
             math.radians(105),          #75             #-1.5976,
             math.radians(-50)           #15             #1.57 
         ]
-
+        
         # TARGET 2
         duration2 = Duration()
         duration2.sec = 4 # tapping velocity needs to be lower
