@@ -5,17 +5,30 @@ from rclpy.node import Node
 from numpy import pi
 from builtin_interfaces.msg import Duration
 from control_msgs.action import FollowJointTrajectory
-from rcl_interfaces.srv import ListParameters
 from trajectory_msgs.msg import (     
     JointTrajectory,
     JointTrajectoryPoint,
 )
+from std_msgs.msg import Float64MultiArray
     
 class FKSolver(Node):
     def __init__(self):
         super().__init__('arm_move_action_client')
         self.controller = '/arm_left_controller'
         self.action_client = ActionClient(self, FollowJointTrajectory, self.controller + "/follow_joint_trajectory")
+        self.best_config_subscriber_ = self.create_subscription(
+            Float64MultiArray,
+            'best_config_topic',  # Name des Topics für die empfangene Konfiguration
+            self.best_config_callback,
+            10
+        )
+
+        self.best_config = None  # Speichert die empfangene beste Konfiguration
+
+    def best_config_callback(self, msg):
+        self.best_config = list(msg.data)  # Speichert empfangene Werte
+        self.get_logger().info(f'Best configuration received: {self.best_config}')
+        self.setup_goal()
 
     def setup_goal(self):
         duration1 = Duration()
@@ -25,19 +38,8 @@ class FKSolver(Node):
         first_target = JointTrajectoryPoint()
         first_target.time_from_start = duration1
         
-        first_target.positions = [
-            0.275066,
-            -1.26958,
-            -1.9176,
-            -1.44634,
-            -0.662545,
-            1.23098,
-            -1.3148,
-
-
-        ]
-
-
+        first_target.positions = self.best_config
+        
         self.goal = FollowJointTrajectory.Goal()
         self.goal.trajectory.joint_names = [
             "arm_left_1_joint",  
@@ -51,27 +53,42 @@ class FKSolver(Node):
 
         # Add trajectory point
         self.goal.trajectory.points.append(first_target)
+        self.send_goal()
+        
+    def setup_initial_goal(self):
+        duration1 = Duration()
+        duration1.sec = 2
+        duration1.nanosec = 0
 
-
-
-    def send_goal(self):
-
-        duration_tolerance = Duration()
-        duration_tolerance.sec = 5
-        duration_tolerance.nanosec = 0
-
-        goal = FollowJointTrajectory.Goal()
-        goal.goal_time_tolerance = duration_tolerance
-        goal.trajectory.joint_names = [
-            "arm_left_1_joint", # rotation shoulder-internal 
-            "arm_left_2_joint", # translation shoulder 
-            "arm_left_3_joint", # rotation upper-arm-internal
-            "arm_left_4_joint", # translation elbow 
-            "arm_left_5_joint", # rotation under-arm-internal
-            "arm_left_6_joint", # translation under-arm
-            "arm_left_7_joint"  # rotation gripper 
+        initial_target = JointTrajectoryPoint()
+        initial_target.time_from_start = duration1
+        
+        initial_target.positions = [
+            3.0023739139688317,
+            -1.7172423582865797,
+            0.22544131626290298,
+            -1.695862876026446,
+            1.418088565904931,
+            0.201232239344729,
+            1.8920639472673,                              
+        ]
+        
+        self.goal = FollowJointTrajectory.Goal()
+        self.goal.trajectory.joint_names = [
+            "arm_left_1_joint",  
+            "arm_left_2_joint",  
+            "arm_left_3_joint",  
+            "arm_left_4_joint",  
+            "arm_left_5_joint",  
+            "arm_left_6_joint",  
+            "arm_left_7_joint"  
         ]
 
+        # Add trajectory point
+        self.goal.trajectory.points.append(initial_target)
+        self.send_goal()
+
+    def send_goal(self):
         self.action_client.wait_for_server()
         self.send_goal_future = self.action_client.send_goal_async(
             self.goal,
@@ -82,31 +99,28 @@ class FKSolver(Node):
         goal_handle = future.result()
 
         if not goal_handle.accepted:
-            print(f"Goal rejected :(")
+            self.get_logger().error("Goal rejected!")
             return
 
-        print(f"Goal accepted :)")
+        self.get_logger().info("Goal accepted!")
         self.get_result_future = goal_handle.get_result_async()
         self.get_result_future.add_done_callback(self.get_result_callback)
 
     def get_result_callback(self, future):
         result = future.result().result
-
-        print(f"Result for goal : {result.error_code}")
+        self.get_logger().info(f"Result for goal: {result.error_code}")
 
     def feedback_callback(self, feedback_msg):
         feedback = feedback_msg.feedback
-        print("\nFeedback received:")
+        self.get_logger().info("Feedback received:")
         for i, position_error in enumerate(feedback.error.positions):
-            print(f"Position error for joint {i + 1}: {position_error}")
-
+            self.get_logger().info(f"Position error for joint {i + 1}: {position_error}")
 
 def main(args=None):
     rclpy.init(args=args)
-
-    arm_action_client = FKSolver()
-    arm_action_client.setup_goal()   # Setup goal
-    arm_action_client.send_goal()    # Start first movement
+    arm_action_client = FKSolver()  
+    arm_action_client.setup_initial_goal()
+    arm_action_client.get_logger().info("Waiting for best configuration...")
     rclpy.spin(arm_action_client)
 
 

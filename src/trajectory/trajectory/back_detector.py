@@ -26,7 +26,7 @@ class BackDetector(Node):
         qos_profile_best_effort = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,  # Match the publisher's QoS
             history=HistoryPolicy.KEEP_LAST,
-            depth=5  # Depth must be the same as the publisher's
+            depth=15  
         )
         
         # Subscriptions

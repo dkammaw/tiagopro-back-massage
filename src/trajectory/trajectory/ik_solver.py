@@ -77,6 +77,7 @@ class MoveItIKExample(Node):
         """
         Callback to process tapping positions and move the robot to each position.
         """
+        
         try:
             # Start the subprocess
             process = subprocess.Popen(['ros2', 'run', 'trajectory', 'move'])
