@@ -101,18 +101,21 @@ private:
     rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr best_config_publisher_;
 };
 
-// Function to compute the nullspace matrix
+/// Function to compute the nullspace matrix (only considering position)
 Eigen::MatrixXd computeNullspace(const moveit::core::RobotState& robot_state, 
                                  const moveit::core::JointModelGroup* jmg)
 {
-    Eigen::MatrixXd jacobian;
-    if (!robot_state.getJacobian(jmg, jmg->getLinkModels().back(), Eigen::Vector3d::Zero(), jacobian, false))
+    Eigen::MatrixXd full_jacobian;
+    if (!robot_state.getJacobian(jmg, jmg->getLinkModels().back(), Eigen::Vector3d::Zero(), full_jacobian, false))
     {
         RCLCPP_ERROR(rclcpp::get_logger("nullspace_exploration"), "Failed to compute Jacobian.");
         return Eigen::MatrixXd::Zero(jmg->getVariableCount(), jmg->getVariableCount());
     }
 
-    Eigen::JacobiSVD<Eigen::MatrixXd> svd(jacobian, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    // **Take only the first three rows for allowing orientation change**
+    // Eigen::MatrixXd pos_jacobian = full_jacobian.topRows(3);
+
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(full_jacobian, Eigen::ComputeFullU | Eigen::ComputeFullV);
     Eigen::Index rank = svd.rank();
     std::size_t ns_dim = svd.cols() - rank;
 
@@ -120,8 +123,10 @@ Eigen::MatrixXd computeNullspace(const moveit::core::RobotState& robot_state,
     {
         RCLCPP_WARN(rclcpp::get_logger("nullspace_exploration"), "No nullspace available.");
         return Eigen::MatrixXd::Zero(jmg->getVariableCount(), 1);
-    } else {
-        RCLCPP_INFO_STREAM(rclcpp::get_logger("nullspace_exploration"), "Jaboian Matrix: \n" << jacobian << "\n");
+    }
+    else
+    {
+        RCLCPP_INFO_STREAM(rclcpp::get_logger("nullspace_exploration"), "Position Jacobian Matrix: \n" << full_jacobian << "\n");
         RCLCPP_INFO_STREAM(rclcpp::get_logger("nullspace_exploration"), "U (Left Singular Vectors): \n" << svd.matrixU() << "\n");
         RCLCPP_INFO_STREAM(rclcpp::get_logger("nullspace_exploration"), "Singular Values: \n" << svd.singularValues() << "\n");
         RCLCPP_INFO_STREAM(rclcpp::get_logger("nullspace_exploration"), "V (Right Singular Vectors): \n" << svd.matrixV() << "\n");
@@ -129,10 +134,11 @@ Eigen::MatrixXd computeNullspace(const moveit::core::RobotState& robot_state,
     }
 
     Eigen::MatrixXd nullspace = svd.matrixV().rightCols(ns_dim);
-    RCLCPP_INFO_STREAM(rclcpp::get_logger("nullspace_exploration"), "Updated Nullspace: \n" << nullspace << "\n");
+    RCLCPP_INFO_STREAM(rclcpp::get_logger("nullspace_exploration"), "Updated Nullspace (Position Only): \n" << nullspace << "\n");
 
     return nullspace;
 }
+
 
 Eigen::VectorXd recursiveNullspaceExploration(
     moveit::core::RobotState& robot_state, 
@@ -179,7 +185,7 @@ Eigen::VectorXd gridSearch(moveit::core::RobotState& robot_state,
     // Grid Search parameters
     double min_scale = -0.01;
     double max_scale = 0.01;
-    double step_size = 0.008;
+    double step_size = 0.001;
 
     for (std::size_t i = 0; i < static_cast<std::size_t>(nullspace.cols()); ++i)
     {

@@ -1,15 +1,18 @@
 import numpy as np
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, Pose
 from moveit_msgs.action import MoveGroup
 from rclpy.action import ActionClient
 from std_msgs.msg import Float32MultiArray
 from shape_msgs.msg import SolidPrimitive
 from visualization_msgs.msg import MarkerArray
+from moveit_msgs.srv import ApplyPlanningScene
+from moveit_msgs.msg import CollisionObject
 import math
 import time
 import subprocess
+import os
 
 
 class MoveItIKExample(Node):
@@ -30,11 +33,54 @@ class MoveItIKExample(Node):
         # Publisher for visualization markers
         self.marker_publisher = self.create_publisher(MarkerArray, '/visualization_marker', 10)
         self.get_logger().info("Created publisher for visualization markers.")
-
+        
+        
+        self.planning_scene_client = self.create_client(ApplyPlanningScene, 'apply_planning_scene')
+        self.get_logger().info("Connected to planning scene service.")
+        
         self.target_pose = None
-        self.movement_status = False  # Initialize as False
+        self.movement_status = False  # Initialize as False  
+        
+        time.sleep(2)
+        self.add_collision_object_human()  # Füge den Mensch als Hindernis hinzu
 
+    def add_collision_object_human(self):
+        while not self.planning_scene_client.wait_for_service(timeout_sec=2.0):
+            self.get_logger().warn("Waiting for planning scene service...")
+
+        collision_object = CollisionObject()
+        collision_object.header.frame_id = "base_link"
+        collision_object.id = "human"
+
+        primitive = SolidPrimitive()
+        primitive.type = SolidPrimitive.BOX
+        primitive.dimensions = [0.0, 0.8, 1.2]
+
+        human_pose = PoseStamped()
+        human_pose.header.frame_id = "base_link"
+        human_pose.pose.position.x = 0.75
+        human_pose.pose.position.y = 0.0
+        human_pose.pose.position.z = 0.6
+
+        collision_object.primitives.append(primitive)
+        collision_object.primitive_poses.append(human_pose.pose)
+        collision_object.operation = CollisionObject.ADD
+
+        planning_scene = ApplyPlanningScene.Request()
+        planning_scene.scene.world.collision_objects.append(collision_object)
+        planning_scene.scene.is_diff = True
+
+        # Send request and wait for response
+        future = self.planning_scene_client.call_async(planning_scene)
+        rclpy.spin_until_future_complete(self, future)
+
+        if future.result():
+            self.get_logger().info("Collision object for human added.")
+        else:
+            self.get_logger().error("Failed to add collision object.")
+            
     def move_to_pose(self, x, y, z, roll, pitch, yaw):
+        
         # Create target pose
         self.target_pose = PoseStamped()
         self.target_pose.header.frame_id = "base_link" 
@@ -52,8 +98,13 @@ class MoveItIKExample(Node):
         # Define MoveGroup Goal
         goal_msg = MoveGroup.Goal()
         goal_msg.request.group_name = "arm_left"  # Set to the planning group arm_left
-        goal_msg.request.start_state.is_diff = True
         goal_msg.request.goal_constraints.append(self.create_pose_constraint(self.target_pose))
+        goal_msg.request.allowed_planning_time = 5.0
+        # goal_msg.request.planner_id = "RRTConnectkConfigDefault"
+        goal_msg.request.max_velocity_scaling_factor = 0.5
+        goal_msg.request.max_acceleration_scaling_factor = 0.5
+        goal_msg.request.workspace_parameters.header.frame_id = "base_link"
+        goal_msg.request.start_state.is_diff = True
 
         # Send the goal to MoveGroup action server for planning
         self.get_logger().info("Planning and executing to target pose...")
@@ -66,7 +117,7 @@ class MoveItIKExample(Node):
         # Feedback after movement execution
         result = future.result()
         if result:
-            if result.status == 2:  # Successfully completed
+            if result.status == 0 or result.status == 2:  # Successfully completed
                 self.get_logger().info("Movement executed successfully!")
             else:
                 self.get_logger().error(f"Movement failed with status: {result.status}")
@@ -77,22 +128,20 @@ class MoveItIKExample(Node):
         """
         Callback to process tapping positions and move the robot to each position.
         """
-        
-        try:
-            # Start the subprocess
-            process = subprocess.Popen(['ros2', 'run', 'trajectory', 'move'])
-            # Wait for up to 5 seconds for the process to finish
-            process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            print("Process did not finish in 5 seconds. Continuing with other tasks.")
-            # Perform other tasks after the timeout
+        # Start the subprocess
+        '''
+        subprocess.run(
+            ['ros2', 'run', 'trajectory', 'move'],
+            check=True,
+            preexec_fn=lambda: os.sched_setaffinity(0, {3})  # Nutzt nur CPU-Kern 2
+        )'''
         
         # Reshape tapping positions into Nx3 array
         positions = np.array(msg.data).reshape(-1, 3)  
         self.get_logger().info(f"Received {len(positions)} tapping positions.")
 
         # Adjusting distance of tapping positions to the tip of the gripper
-        positions[:, 0] -= 0.15 
+        positions[:, 0] -= 0.23 
         # Move to each position sequentially
         for index, pos in enumerate(positions):
             x, y, z = map(float, pos)  # Explicit casting

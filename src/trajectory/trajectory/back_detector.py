@@ -26,7 +26,7 @@ class BackDetector(Node):
         qos_profile_best_effort = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,  # Match the publisher's QoS
             history=HistoryPolicy.KEEP_LAST,
-            depth=15  
+            depth=300
         )
         
         # Subscriptions
@@ -49,6 +49,8 @@ class BackDetector(Node):
         self.point_cloud = None
         self.rgb_image = None
         self.human_mask = None
+        
+        self.received_cloud = False
 
 
     def frame_transformation(self, msg):
@@ -95,23 +97,24 @@ class BackDetector(Node):
 
 
     def pointcloud_callback(self, msg):
-        
-        pcl_msg = self.frame_transformation(msg)
-        
-        # Converts pc to array
-        self.point_cloud  = pc2.read_points_numpy(pcl_msg, field_names=("x", "y", "z"), skip_nans=True)
-        # Downsamples pc
-        self.point_cloud = self.voxel_grid_filter(self.point_cloud, 0.014)
-        
-        if self.point_cloud is not None and len(self.point_cloud) > 0:
-            self.get_logger().info(f"Received transformed point cloud with {len(self.point_cloud)} points.")
-            # if self.human_mask is not None:
-                 # self.filter_points_by_human_mask()
-            #self.publish_processed_pointcloud(self.point_cloud)
-            self.process_back_detection()
-        else:
-            self.get_logger().info("No valid point cloud data received.")
+        if self.received_cloud == False:
+            pcl_msg = self.frame_transformation(msg)
             
+            # Converts pc to array
+            self.point_cloud  = pc2.read_points_numpy(pcl_msg, field_names=("x", "y", "z"), skip_nans=True)
+            # Downsamples pc
+            self.point_cloud = self.voxel_grid_filter(self.point_cloud, 0.014)
+            
+            if self.point_cloud is not None and len(self.point_cloud) > 0:
+                self.get_logger().info(f"Received transformed point cloud with {len(self.point_cloud)} points.")
+                # if self.human_mask is not None:
+                    # self.filter_points_by_human_mask()
+                #self.publish_processed_pointcloud(self.point_cloud)
+                self.process_back_detection()
+            else:
+                self.get_logger().info("No valid point cloud data received.")
+        
+        self.received_cloud = True 
             
     def image_callback(self, msg):
         # Convert ROS Image message to OpenCV format
@@ -131,6 +134,9 @@ class BackDetector(Node):
         """
         header = Header()
         header.frame_id = 'base_link'  
+        
+        
+        points[:, 0] -= 0.8
 
         # Create a PointCloud2 message
         pointcloud_msg = create_cloud_xyz32(header, points.tolist())
@@ -383,7 +389,7 @@ class BackDetector(Node):
         tapping_positions = np.array(tapping_positions)
         
         # Subtract 1 from the x-coordinate of each tapping position to transform in correct frame
-        tapping_positions[:, 0] -= 1
+        # tapping_positions[:, 0] -= 0.8
         
         # Publish tapping positions
         tapping_msg = Float32MultiArray()
@@ -395,7 +401,7 @@ class BackDetector(Node):
         
         # Visualize tapping positions
         # self.visualize_back(back_points, tapping_positions)
-        self.get_logger().info(f"Tapping positions: {tapping_positions}")
+        self.get_logger().info(f"Tapping positions \n: {tapping_positions}")
         return tapping_positions
 
 
@@ -405,10 +411,12 @@ class BackDetector(Node):
     
     def publish_markers(self, positions):
         """
-        Publish RViz markers for the tapping positions.
+        Publish RViz markers for the tapping positions, including duplicates shifted in x-direction by 0.1.
         """
+
         marker_array = MarkerArray()
         for i, pos in enumerate(positions):
+            # Original marker
             marker = Marker()
             marker.header.frame_id = "base_link"
             marker.header.stamp = self.get_clock().now().to_msg()
@@ -419,9 +427,6 @@ class BackDetector(Node):
             marker.pose.position.x = float(pos[0])
             marker.pose.position.y = float(pos[1])
             marker.pose.position.z = float(pos[2])
-            marker.pose.orientation.x = 0.0
-            marker.pose.orientation.y = 0.0
-            marker.pose.orientation.z = 0.0
             marker.pose.orientation.w = 1.0
             marker.scale.x = 0.05  # Sphere diameter
             marker.scale.y = 0.05
@@ -432,11 +437,34 @@ class BackDetector(Node):
             marker.color.a = 1.0
             marker_array.markers.append(marker)
 
-            # Log the position for the current marker
-            self.get_logger().info(f"Published marker {i} at position: x={pos[0]}, y={pos[1]}, z={pos[2]}")
+            # Shifted marker (+0.1 in x-direction)
+            shifted_marker = Marker()
+            shifted_marker.header.frame_id = "base_link"
+            shifted_marker.header.stamp = self.get_clock().now().to_msg()
+            shifted_marker.ns = "tapping_positions_shifted"
+            shifted_marker.id = i + 1000  # Ensure unique ID
+            shifted_marker.type = Marker.SPHERE
+            shifted_marker.action = Marker.ADD
+            shifted_marker.pose.position.x = float(pos[0]) - 0.085  # Shift in X
+            shifted_marker.pose.position.y = float(pos[1])
+            shifted_marker.pose.position.z = float(pos[2])
+            shifted_marker.pose.orientation.w = 1.0
+            shifted_marker.scale.x = 0.05
+            shifted_marker.scale.y = 0.05
+            shifted_marker.scale.z = 0.05
+            shifted_marker.color.r = 1.0  # Red color for differentiation
+            shifted_marker.color.g = 0.0
+            shifted_marker.color.b = 0.0
+            shifted_marker.color.a = 1.0
+            marker_array.markers.append(shifted_marker)
 
-        # Publish the entire marker array
+            # Log positions
+            self.get_logger().info(f"Published marker {i} at position: x={pos[0]}, y={pos[1]}, z={pos[2]}")
+            self.get_logger().info(f"Published shifted marker {i} at position: x={pos[0] + 0.1}, y={pos[1]}, z={pos[2]}")
+
+        # Publish all markers
         self.marker_publisher.publish(marker_array)
+
     
     def visualize_back(self, back_points, tapping_positions):
         """
