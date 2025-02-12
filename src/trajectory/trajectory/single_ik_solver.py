@@ -1,14 +1,9 @@
-# SERVICE IMPLEMENTATION of Collision Object
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
 from moveit_msgs.action import MoveGroup
 from rclpy.action import ActionClient
-from moveit_msgs.msg import RobotState
 from shape_msgs.msg import SolidPrimitive
-from moveit_msgs.msg import CollisionObject
-from moveit_msgs.srv import ApplyPlanningScene
-from moveit_msgs.srv import GetPlanningScene
 import math
 
 class MoveItIKExample(Node):
@@ -22,77 +17,8 @@ class MoveItIKExample(Node):
         self.move_group_client.wait_for_server()
         self.get_logger().info("Connected to MoveGroup action server.")
         
-        self.state2_pub= self.create_publisher(RobotState, 'robot_state_topic', 10)
-        
         # Initialize target_pose as None
         self.target_pose = None
-        
-        self.planning_scene_client = self.create_client(ApplyPlanningScene, 'apply_planning_scene')
-        self.get_logger().info("Connected to planning scene service.")
-        import time
-        time.sleep(2)
-        #self.get_planning_scene() # output the object that has been added to the planning scene
-        self.add_collision_object_human()  # Füge den Mensch als Hindernis hinzu
-
-    def add_collision_object_human(self):
-        while not self.planning_scene_client.wait_for_service(timeout_sec=2.0):
-            self.get_logger().warn("Waiting for planning scene service...")
-
-        collision_object = CollisionObject()
-        collision_object.header.frame_id = "base_link"
-        collision_object.id = "human"
-
-        primitive = SolidPrimitive()
-        primitive.type = SolidPrimitive.BOX
-        primitive.dimensions = [0.6, 0.6, 1.2]
-
-        human_pose = PoseStamped()
-        human_pose.header.frame_id = "base_link"
-        human_pose.pose.position.x = 1.125
-        human_pose.pose.position.y = 0.0
-        human_pose.pose.position.z = 0.6
-
-        collision_object.primitives.append(primitive)
-        collision_object.primitive_poses.append(human_pose.pose)
-        collision_object.operation = CollisionObject.ADD
-
-        planning_scene = ApplyPlanningScene.Request()
-        planning_scene.scene.world.collision_objects.append(collision_object)
-        planning_scene.scene.is_diff = True
-
-        # Send request and wait for response
-        future = self.planning_scene_client.call_async(planning_scene)
-        rclpy.spin_until_future_complete(self, future)
-
-        if future.result():
-            self.get_logger().info("Collision object for human added.")
-        else:
-            self.get_logger().error("Failed to add collision object.")
- 
-    
-    '''
-    def get_planning_scene(self):
-        self.get_logger().info("Requesting current planning scene...")
-
-        planning_scene_client = self.create_client(GetPlanningScene, '/get_planning_scene')
-
-        while not planning_scene_client.wait_for_service(timeout_sec=2.0):
-            self.get_logger().warn("Waiting for /get_planning_scene service...")
-
-        request = GetPlanningScene.Request()
-
-        future = planning_scene_client.call_async(request)
-        rclpy.spin_until_future_complete(self, future)
-
-        if future.result():
-            scene = future.result().scene
-            self.get_logger().info(f"Received planning scene with {len(scene.world.collision_objects)} collision objects.")
-            for obj in scene.world.collision_objects:
-                self.get_logger().info(f"Collision Object: {obj.id} at {obj.primitive_poses[0].position}")
-        else:
-            self.get_logger().error("Failed to get planning scene.")
-    '''
-    
             
     def move_to_pose(self, x, y, z, roll, pitch, yaw):
         
@@ -188,6 +114,7 @@ def main(args=None):
 
 
 if __name__ == '__main__':
-    main()    
- 
+    main()
+
+
 
