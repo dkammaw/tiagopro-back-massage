@@ -134,7 +134,7 @@ Eigen::MatrixXd computeNullspace(const moveit::core::RobotState& robot_state,
     }
 
     Eigen::MatrixXd nullspace = svd.matrixV().rightCols(ns_dim);
-    RCLCPP_INFO_STREAM(rclcpp::get_logger("nullspace_exploration"), "Updated Nullspace (Position Only): \n" << nullspace << "\n");
+    RCLCPP_INFO_STREAM(rclcpp::get_logger("nullspace_exploration"), "Updated Nullspace: \n" << nullspace << "\n");
 
     return nullspace;
 }

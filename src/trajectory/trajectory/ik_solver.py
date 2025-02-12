@@ -54,7 +54,7 @@ class MoveItIKExample(Node):
 
         primitive = SolidPrimitive()
         primitive.type = SolidPrimitive.BOX
-        primitive.dimensions = [0.0, 0.8, 1.2]
+        primitive.dimensions = [0.0, 1.2, 1.2]  #0.6, 0.0, 1.2
 
         human_pose = PoseStamped()
         human_pose.header.frame_id = "base_link"
@@ -124,17 +124,19 @@ class MoveItIKExample(Node):
         else:
             self.get_logger().error("Movement execution failed with no result.")
 
+
     def tapping_positions_callback(self, msg):
         """
         Callback to process tapping positions and move the robot to each position.
         """
-        # Start the subprocess
-        '''
-        subprocess.run(
-            ['ros2', 'run', 'trajectory', 'move'],
-            check=True,
-            preexec_fn=lambda: os.sched_setaffinity(0, {3})  # Nutzt nur CPU-Kern 2
-        )'''
+        try:
+            # Start the subprocess
+            process = subprocess.Popen(['ros2', 'run', 'trajectory', 'move'])
+            # Wait for up to 13 seconds for the process to finish
+            process.wait(timeout=13)
+        except subprocess.TimeoutExpired:
+            print("Process did not finish in 13 seconds. Continuing with other tasks.")
+            # Perform other tasks after the timeout
         
         # Reshape tapping positions into Nx3 array
         positions = np.array(msg.data).reshape(-1, 3)  

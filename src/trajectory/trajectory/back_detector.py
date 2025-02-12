@@ -388,9 +388,6 @@ class BackDetector(Node):
 
         tapping_positions = np.array(tapping_positions)
         
-        # Subtract 1 from the x-coordinate of each tapping position to transform in correct frame
-        # tapping_positions[:, 0] -= 0.8
-        
         # Publish tapping positions
         tapping_msg = Float32MultiArray()
         tapping_msg.data = tapping_positions.flatten().tolist()
