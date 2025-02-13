@@ -13,6 +13,7 @@
   <depend>moveit_ros_planning_interface</depend>
 
   <depend>moveit_msgs</depend>
+  <depend>std_msgs</depend>
 
   <exec_depend>control_msgs</exec_depend>
   

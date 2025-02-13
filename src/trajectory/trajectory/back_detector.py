@@ -388,6 +388,10 @@ class BackDetector(Node):
 
         tapping_positions = np.array(tapping_positions)
         
+         # Reorder positions as [5, 4, 3, 0, 1, 2]
+        ordered_indices = [5, 4, 3, 0, 1, 2]
+        tapping_positions = tapping_positions[ordered_indices]
+        
         # Publish tapping positions
         tapping_msg = Float32MultiArray()
         tapping_msg.data = tapping_positions.flatten().tolist()

@@ -10,6 +10,8 @@ find_package(moveit_ros_planning_interface REQUIRED)
 # Find MoveIt2 dependencies
 find_package(moveit_core REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(std_msgs REQUIRED)
+
 
 # Existing executables
 add_executable(nullspace_explorer src/nullspace_explorer.cpp)
