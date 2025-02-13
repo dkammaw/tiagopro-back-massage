@@ -31,41 +31,6 @@ public:
 
     void tapping_positions_callback(const std_msgs::msg::Float32MultiArray::SharedPtr msg)
     {
-        RCLCPP_INFO(this->get_logger(), "Received tapping positions:");
-        for (size_t i = 0; i < msg->data.size(); ++i)
-        {
-            RCLCPP_INFO(this->get_logger(), "Position[%zu]: %f", i, msg->data[i]);
-        }
-        // Further processing can be done here
-    }
-
-    // Function for linear interpolation between two points
-    geometry_msgs::msg::Pose interpolate_pose(const geometry_msgs::msg::Pose &start, const geometry_msgs::msg::Pose &end, double t) {
-        geometry_msgs::msg::Pose interpolated_pose;
-        
-        // Interpolate the position
-        interpolated_pose.position.x = start.position.x + t * (end.position.x - start.position.x);
-        interpolated_pose.position.y = start.position.y + t * (end.position.y - start.position.y);
-        interpolated_pose.position.z = start.position.z + t * (end.position.z - start.position.z);
-        
-        // For orientation, interpolate the quaternion
-        tf2::Quaternion start_q(start.orientation.x, start.orientation.y, start.orientation.z, start.orientation.w);
-        tf2::Quaternion end_q(end.orientation.x, end.orientation.y, end.orientation.z, end.orientation.w);
-        
-        tf2::Quaternion interpolated_q = start_q.slerp(end_q, t);
-        
-        interpolated_pose.orientation.x = interpolated_q.x();
-        interpolated_pose.orientation.y = interpolated_q.y();
-        interpolated_pose.orientation.z = interpolated_q.z();
-        interpolated_pose.orientation.w = interpolated_q.w();
-        
-        return interpolated_pose;
-    }
-
-    // Plan the Cartesian path
-    void plan_cartesian_path() {
-        std::vector<geometry_msgs::msg::Pose> waypoints;
-
         // Define start pose
         geometry_msgs::msg::Pose start_pose;
         start_pose.position.x = 0.283;
@@ -73,30 +38,86 @@ public:
         start_pose.position.z = 0.480;
         start_pose.orientation.w = 1.0;  // Neutral quaternion (no rotation)
 
-        waypoints.push_back(start_pose);
 
-        // Define target pose
-        geometry_msgs::msg::Pose target_pose;
-        target_pose.position.x = 0.707;
-        target_pose.position.y = 0.012;
-        target_pose.position.z = 0.813;
-        tf2::Quaternion q;
-        q.setRPY(M_PI / 2, 0, M_PI / 2);  // Roll=90°, Pitch=0, Yaw=90°
-        target_pose.orientation.x = q.x();
-        target_pose.orientation.y = q.y();
-        target_pose.orientation.z = q.z();
-        target_pose.orientation.w = q.w();
+        // Convert flat array into a vector of Pose objects
+        std::vector<geometry_msgs::msg::Pose> positions;
+        for (size_t i = 0; i < msg->data.size(); i += 3)
+        {
+            geometry_msgs::msg::Pose pose;
+            pose.position.x = msg->data[i] - 0.25;
+            pose.position.y = msg->data[i + 1];
+            pose.position.z = msg->data[i + 2];
+            pose.orientation.w = 1.0;  // Keep orientation neutral for now
+
+            positions.push_back(pose);
+        }
+
+        RCLCPP_INFO(this->get_logger(), "Received %zu tapping positions:", positions.size());
+
+        for (size_t i = 0; i < positions.size(); ++i)
+        {
+            RCLCPP_INFO(this->get_logger(), "Planning to position[%zu]: x=%f, y=%f, z=%f", 
+                        i, positions[i].position.x, positions[i].position.y, positions[i].position.z);
+
+            if (i == 0) {
+                plan_cartesian_path(start_pose, positions[i], true);
+            } else {
+                plan_cartesian_path(positions[i - 1], positions[i], false);
+            }
+        }
+    }
+
+    // Function for linear interpolation between two points
+    geometry_msgs::msg::Pose interpolate_pose(const geometry_msgs::msg::Pose &start, const geometry_msgs::msg::Pose &end, double t, bool interpolate_orientation) {
+        geometry_msgs::msg::Pose interpolated_pose;
+        
+        // Interpolate the position
+        interpolated_pose.position.x = start.position.x + t * (end.position.x - start.position.x);
+        interpolated_pose.position.y = start.position.y + t * (end.position.y - start.position.y);
+        interpolated_pose.position.z = start.position.z + t * (end.position.z - start.position.z);
+        
+        if (interpolate_orientation) {
+            // For orientation, interpolate the quaternion
+            tf2::Quaternion start_q(start.orientation.x, start.orientation.y, start.orientation.z, start.orientation.w);
+            tf2::Quaternion end_q(end.orientation.x, end.orientation.y, end.orientation.z, end.orientation.w);
+            
+            tf2::Quaternion interpolated_q = start_q.slerp(end_q, t);
+            
+            interpolated_pose.orientation.x = interpolated_q.x();
+            interpolated_pose.orientation.y = interpolated_q.y();
+            interpolated_pose.orientation.z = interpolated_q.z();
+            interpolated_pose.orientation.w = interpolated_q.w();
+        }
+        
+        return interpolated_pose;
+    }
+
+    // Plan the Cartesian path
+    void plan_cartesian_path(geometry_msgs::msg::Pose start_pose, geometry_msgs::msg::Pose target_pose, bool interpolate_orientation) {
+
+        std::vector<geometry_msgs::msg::Pose> waypoints;
+
+        waypoints.push_back(start_pose);
+        if (interpolate_orientation) {
+            // Define orientaion for target pose
+            tf2::Quaternion q;
+            q.setRPY(M_PI / 2, 0, M_PI / 2);  // Roll=90°, Pitch=0, Yaw=90°
+            target_pose.orientation.x = q.x();
+            target_pose.orientation.y = q.y();
+            target_pose.orientation.z = q.z();
+            target_pose.orientation.w = q.w();
+        }
 
         // Interpolate between the start and target poses with a step size
         int num_steps = 5;  // Adjust this value to change the number of waypoints
         for (int i = 1; i <= num_steps; ++i) {
             double t = static_cast<double>(i) / (num_steps + 1);
-            geometry_msgs::msg::Pose interpolated_pose = interpolate_pose(start_pose, target_pose, t);
+            geometry_msgs::msg::Pose interpolated_pose = interpolate_pose(start_pose, target_pose, t, interpolate_orientation);
             waypoints.push_back(interpolated_pose);
         }
-
         // Add the final target pose
         waypoints.push_back(target_pose);
+
 
         // Calculate trajectory
         moveit_msgs::msg::RobotTrajectory trajectory;
@@ -186,7 +207,6 @@ int main(int argc, char **argv)
     rclcpp::init(argc, argv);
     auto ik_solver_node = std::make_shared<IKSolver>();
     ik_solver_node->initialize_move_group();
-    ik_solver_node->plan_cartesian_path();
     rclcpp::spin(ik_solver_node);
     rclcpp::shutdown();
     return 0;

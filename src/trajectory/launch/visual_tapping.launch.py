@@ -10,7 +10,7 @@ def generate_launch_description():
             output='screen'
         ),
         Node(
-            package='trajectory',
+            package='test_cpp',
             executable='ik_solver',
             name='ik_solver',
             output='screen'
