@@ -17,5 +17,11 @@ def generate_launch_description():
             executable='state_receiver',
             name='state_receiver',
             output='screen'
+        ),
+        Node(
+            package='trajectory',
+            executable='fk_solver',
+            name='fk_solver',
+            output='screen'
         )
     ])

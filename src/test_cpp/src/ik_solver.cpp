@@ -7,6 +7,10 @@
 #include <tf2/LinearMath/Quaternion.h>
 #include <vector>
 #include <cmath>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <cstdlib>  
+#include <iostream>  
+#include <thread>  
 
 
 class IKSolver : public rclcpp::Node
@@ -28,7 +32,7 @@ public:
         robot_model_ = std::const_pointer_cast<moveit::core::RobotModel>(move_group->getRobotModel());
         robot_state_ = std::make_shared<moveit::core::RobotState>(robot_model_);
     }
-/*
+
     void tapping_positions_callback(const std_msgs::msg::Float32MultiArray::SharedPtr msg)
     {
         // Define start pose
@@ -38,32 +42,34 @@ public:
         start_pose.position.z = 0.480;
         start_pose.orientation.w = 1.0;  // Neutral quaternion (no rotation)
 
+        tf2::Quaternion desired_orientation;
+        desired_orientation.setRPY(M_PI / 2, 0, M_PI / 2);
+        desired_orientation.normalize();
 
         // Convert flat array into a vector of Pose objects
         std::vector<geometry_msgs::msg::Pose> positions;
+
         for (size_t i = 0; i < msg->data.size(); i += 3)
         {
             geometry_msgs::msg::Pose pose;
-            pose.position.x = msg->data[i] - 0.25;
+            pose.position.x = msg->data[i] - 0.22;
             pose.position.y = msg->data[i + 1];
             pose.position.z = msg->data[i + 2];
-            pose.orientation.w = 1.0;  // Keep orientation neutral for now
+
+            // Assign the fixed desired orientation
+            pose.orientation = tf2::toMsg(desired_orientation);
 
             positions.push_back(pose);
         }
 
         RCLCPP_INFO(this->get_logger(), "Received %zu tapping positions:", positions.size());
 
-        for (size_t i = 0; i < positions.size(); ++i)
+        for (size_t i = 0; i < positions.size(); i++)
         {
             RCLCPP_INFO(this->get_logger(), "Planning to position[%zu]: x=%f, y=%f, z=%f", 
                         i, positions[i].position.x, positions[i].position.y, positions[i].position.z);
 
-            if (i == 0) {
-                plan_cartesian_path(start_pose, positions[i], true);
-            } else {
-                plan_cartesian_path(positions[i - 1], positions[i], false);
-            }
+            plan_cartesian_path(i == 0 ? start_pose : positions[i - 1], positions[i], i == 0);
         }
     }
 
@@ -76,8 +82,8 @@ public:
         interpolated_pose.position.y = start.position.y + t * (end.position.y - start.position.y);
         interpolated_pose.position.z = start.position.z + t * (end.position.z - start.position.z);
         
+        // Ensure that interpolation happens only if needed
         if (interpolate_orientation) {
-            // For orientation, interpolate the quaternion
             tf2::Quaternion start_q(start.orientation.x, start.orientation.y, start.orientation.z, start.orientation.w);
             tf2::Quaternion end_q(end.orientation.x, end.orientation.y, end.orientation.z, end.orientation.w);
             
@@ -87,13 +93,11 @@ public:
             interpolated_pose.orientation.y = interpolated_q.y();
             interpolated_pose.orientation.z = interpolated_q.z();
             interpolated_pose.orientation.w = interpolated_q.w();
-        } 
-        else if (orientation_set) {
-            interpolated_pose.orientation.x = fixed_orientation.x();
-            interpolated_pose.orientation.y = fixed_orientation.y();
-            interpolated_pose.orientation.z = fixed_orientation.z();
-            interpolated_pose.orientation.w = fixed_orientation.w();
+        } else {
+            // Force the fixed target orientation
+            interpolated_pose.orientation = end.orientation;
         }
+         
         return interpolated_pose;
     }
 
@@ -103,38 +107,10 @@ public:
 
         waypoints.push_back(start_pose);
         
-        // Falls die Orientierung interpoliert werden soll (nur für den ersten Schritt)
-        if (interpolate_orientation && !orientation_set) {
-            tf2::Quaternion q;
-            q.setRPY(M_PI / 2, 0, M_PI / 2);  // Roll=90°, Pitch=0, Yaw=90°
-            
-            target_pose.orientation.x = q.x();
-            target_pose.orientation.y = q.y();
-            target_pose.orientation.z = q.z();
-            target_pose.orientation.w = q.w();
-            
-            // Speichere die Orientierung für zukünftige Schritte
-            fixed_orientation = q;
-            orientation_set = true;
-        } 
-        // Für nachfolgende Schritte: Behalte die gespeicherte Orientierung bei
-        else if (orientation_set) {
-            target_pose.orientation.x = fixed_orientation.x();
-            target_pose.orientation.y = fixed_orientation.y();
-            target_pose.orientation.z = fixed_orientation.z();
-            target_pose.orientation.w = fixed_orientation.w();
-        }
-
         // Interpolation zwischen Start- und Zielpose
         int num_steps = 5;
         for (int i = 1; i <= num_steps; ++i) {
             // Falls die Orientierung nach dem ersten Schritt nicht mehr verändert werden soll
-            if (!interpolate_orientation && orientation_set) {
-                start_pose.orientation.x = fixed_orientation.x();
-                start_pose.orientation.y = fixed_orientation.y();
-                start_pose.orientation.z = fixed_orientation.z();
-                start_pose.orientation.w = fixed_orientation.w();
-            }
             double t = static_cast<double>(i) / (num_steps + 1);
             geometry_msgs::msg::Pose interpolated_pose = interpolate_pose(start_pose, target_pose, t, interpolate_orientation);
 
@@ -158,95 +134,34 @@ public:
         plan.trajectory_ = trajectory;
         move_group->execute(plan);
 
-        RCLCPP_INFO(this->get_logger(), "Trajectory executed successfully");
+        RCLCPP_INFO(this->get_logger(), "Trajectory executed successfully!");
+
+        // **PAUSE FOR 5 SECONDS**
+        rclcpp::sleep_for(std::chrono::seconds(3));
+
+        RCLCPP_INFO(this->get_logger(), "Continuing after 3-second pause with nullspace exploration...");
+
+        // Call the Nullspace Exploration node synchronously by using a std::thread and joining it
+        std::thread nullspace_thread(&IKSolver::call_nullspace_exploration_node, this);
+
+        // Wait for the nullspace exploration node subprocess to finish before continuing
+        nullspace_thread.join();  // This will block until the subprocess finishes
     }
-*/
-    void tapping_positions_callback(const std_msgs::msg::Float32MultiArray::SharedPtr msg)
+
+    void call_nullspace_exploration_node()
     {
-        geometry_msgs::msg::Pose start_pose;
-        start_pose.position.x = 0.283;
-        start_pose.position.y = 0.208;
-        start_pose.position.z = 0.480;
-        start_pose.orientation.w = 1.0;
+        RCLCPP_INFO(this->get_logger(), "Launching the nullspace exploration node...");
 
-        std::vector<geometry_msgs::msg::Pose> positions;
-        for (size_t i = 0; i < msg->data.size(); i += 3)
-        {
-            geometry_msgs::msg::Pose pose;
-            pose.position.x = msg->data[i] - 0.2;
-            pose.position.y = msg->data[i + 1];
-            pose.position.z = msg->data[i + 2];
-            pose.orientation.w = 1.0;
-            positions.push_back(pose);
-        }
+        // Launch the nullspace_exploration node using ros2 launch as a subprocess
+        int result = std::system("ros2 launch test_cpp nullspace_explorer.launch.py");
 
-        RCLCPP_INFO(this->get_logger(), "Received %zu tapping positions:", positions.size());
-
-        for (size_t i = 0; i < 3; ++i)
-        {
-            RCLCPP_INFO(this->get_logger(), "Moving to position[%zu]: x=%f, y=%f, z=%f", i, positions[i].position.x, positions[i].position.y, positions[i].position.z);
-            plan_cartesian_path(i == 0 ? start_pose : positions[i - 1], positions[i], i == 0);
+        // Wait until the subprocess finishes before proceeding
+        if (result == 0) {
+            RCLCPP_INFO(this->get_logger(), "Nullspace exploration node finished successfully.");
+        } else {
+            RCLCPP_ERROR(this->get_logger(), "Nullspace exploration node failed.");
         }
     }
-
-    void plan_cartesian_path(const geometry_msgs::msg::Pose& start_pose, geometry_msgs::msg::Pose target_pose, bool first_interpolation)
-    {
-        std::vector<geometry_msgs::msg::Pose> waypoints;
-        waypoints.push_back(start_pose);
-
-        tf2::Quaternion start_q(start_pose.orientation.x, start_pose.orientation.y, start_pose.orientation.z, start_pose.orientation.w);
-        tf2::Quaternion target_q;
-        target_q.setRPY(M_PI / 2, 0, M_PI / 2);
-
-        int num_steps = 5;
-        for (int i = 1; i <= num_steps; ++i)
-        {
-            double t = static_cast<double>(i) / (num_steps + 1);
-            geometry_msgs::msg::Pose interpolated_pose;
-            interpolated_pose.position.x = start_pose.position.x + t * (target_pose.position.x - start_pose.position.x);
-            interpolated_pose.position.y = start_pose.position.y + t * (target_pose.position.y - start_pose.position.y);
-            interpolated_pose.position.z = start_pose.position.z + t * (target_pose.position.z - start_pose.position.z);
-            
-            if (first_interpolation) {
-                // Only interpolate for the first movement
-                tf2::Quaternion interpolated_q = start_q.slerp(target_q, t);
-                interpolated_pose.orientation.x = interpolated_q.x();
-                interpolated_pose.orientation.y = interpolated_q.y();
-                interpolated_pose.orientation.z = interpolated_q.z();
-                interpolated_pose.orientation.w = interpolated_q.w();
-
-                // Store the final orientation after interpolation
-                target_pose.orientation = interpolated_pose.orientation;
-            } else {
-                // Use the first target's final orientation for all subsequent moves
-                interpolated_pose.orientation = start_pose.orientation;
-            }
-
-            
-            waypoints.push_back(interpolated_pose);
-        }
-
-        target_pose.orientation.x = target_q.x();
-        target_pose.orientation.y = target_q.y();
-        target_pose.orientation.z = target_q.z();
-        target_pose.orientation.w = target_q.w();
-
-        waypoints.push_back(target_pose);
-
-        moveit_msgs::msg::RobotTrajectory trajectory;
-        const double jump_threshold = 0.0;
-        const double eef_step = 0.01;
-        double fraction = move_group->computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
-
-        RCLCPP_INFO(this->get_logger(), "Cartesian path planned (%.2f%% achieved)", fraction * 100.0);
-        publish_markers(waypoints);
-
-        moveit::planning_interface::MoveGroupInterface::Plan plan;
-        plan.trajectory_ = trajectory;
-        move_group->execute(plan);
-        RCLCPP_INFO(this->get_logger(), "Trajectory executed successfully");
-    }
-
 
 private:
     moveit::core::RobotModelPtr robot_model_;
@@ -270,9 +185,9 @@ private:
         path_marker.id = 0;
         path_marker.type = visualization_msgs::msg::Marker::LINE_STRIP;
         path_marker.action = visualization_msgs::msg::Marker::ADD;
-        path_marker.scale.x = 0.01; // Line width
+        path_marker.scale.x = 0.015; // Line width
         path_marker.color.r = 0.0;
-        path_marker.color.g = 1.0; // Green
+        path_marker.color.g = 1.0; 
         path_marker.color.b = 0.0;
         path_marker.color.a = 1.0;
 
@@ -298,12 +213,12 @@ private:
             waypoint_marker.id = id_counter++;
             waypoint_marker.type = visualization_msgs::msg::Marker::SPHERE;
             waypoint_marker.action = visualization_msgs::msg::Marker::ADD;
-            waypoint_marker.scale.x = 0.02; // Sphere size
-            waypoint_marker.scale.y = 0.02;
-            waypoint_marker.scale.z = 0.02;
-            waypoint_marker.color.r = 1.0; // Red
+            waypoint_marker.scale.x = 0.015; // Sphere size
+            waypoint_marker.scale.y = 0.015;
+            waypoint_marker.scale.z = 0.015;
+            waypoint_marker.color.r = 0.0; 
             waypoint_marker.color.g = 0.0;
-            waypoint_marker.color.b = 0.0;
+            waypoint_marker.color.b = 1.0;
             waypoint_marker.color.a = 1.0;
             waypoint_marker.pose = pose;
 

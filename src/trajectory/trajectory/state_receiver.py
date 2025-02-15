@@ -38,7 +38,7 @@ class StateReceiver(Node):
                 robot_state_msg.joint_state.name.append(joint)  # Add joint name
                 robot_state_msg.joint_state.position.append(position)  # Add position
                 # Log joint position
-                self.get_logger().info(f"Joint: {joint}, Position: {position}")
+                # self.get_logger().info(f"Joint: {joint}, Position: {position}")
             else:
                 robot_state_msg.joint_state.name.append(joint)  # Add joint name with default position
                 robot_state_msg.joint_state.position.append(0.0)  # Default position

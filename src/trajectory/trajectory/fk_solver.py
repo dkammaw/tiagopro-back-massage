@@ -119,9 +119,9 @@ class FKSolver(Node):
 def main(args=None):
     rclpy.init(args=args)
     arm_action_client = FKSolver()  
-    arm_action_client.setup_initial_goal()
+    #arm_action_client.setup_initial_goal()
     arm_action_client.get_logger().info("Waiting for best configuration...")
-    rclpy.spin(arm_action_client)
+    rclpy.spin_once(arm_action_client)
 
 
 if __name__ == '__main__':
