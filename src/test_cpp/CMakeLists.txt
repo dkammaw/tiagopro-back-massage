@@ -22,9 +22,6 @@ add_executable(ik_solver src/ik_solver.cpp)
 
 target_link_libraries(nullspace_explorer fk_solver_lib)
 
-# Enable Precompiled Headers (AFTER defining the target)
-target_precompile_headers(nullspace_explorer PRIVATE /ros2_ws/src/test_cpp/src/pch.h)
-
 ament_target_dependencies(
     ik_solver
     rclcpp 
@@ -55,6 +52,11 @@ install(TARGETS
     fk_solver_lib
     DESTINATION lib/${PROJECT_NAME}
 )
+
+target_include_directories(ik_solver PUBLIC include ${rclcpp_INCLUDE_DIRS})
+target_include_directories(nullspace_explorer PUBLIC include ${rclcpp_INCLUDE_DIRS})
+target_include_directories(fk_solver_lib PUBLIC include ${rclcpp_INCLUDE_DIRS})
+
 
 # Install launch files
 install(DIRECTORY
