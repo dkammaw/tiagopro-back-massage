@@ -25,19 +25,9 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'leftTapper = trajectory.left_tapper:main',
-            'rightTapper = trajectory.right_tapper:main',
             'move = trajectory.move:main',
-            'relax = trajectory.relax:main',
-            'sensor_ft = trajectory.sensor_ft:main',
-            'impedance_gain_adjuster = trajectory.impedance_control:main',
-            'torsoLifter = trajectory.torso_lifter:main',
             'back_detector = trajectory.back_detector:main',
-            'ik_solver = trajectory.ik_solver:main',
-            'rviz_visualizer = trajectory.rviz_visualizer:main',
-            'single_ik_solver = trajectory.single_ik_solver:main',
             'state_receiver = trajectory.state_receiver:main',
-            'fk_solver = trajectory.fk_solver:main'
         ],
     },
 )

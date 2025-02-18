@@ -36,7 +36,7 @@ void IKSolver::tapping_positions_callback(const std_msgs::msg::Float32MultiArray
     for (size_t i = 0; i < msg->data.size(); i += 3)
     {
         geometry_msgs::msg::Pose pose;
-        pose.position.x = msg->data[i] - 0.18;
+        pose.position.x = msg->data[i] - 0.18; // transformation arm_left_tool_link -> tip_link
         pose.position.y = msg->data[i + 1];
         pose.position.z = msg->data[i + 2];
 
@@ -110,9 +110,9 @@ void IKSolver::plan_cartesian_path(geometry_msgs::msg::Pose start_pose, geometry
     double fraction = move_group->computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
 
     RCLCPP_INFO(this->get_logger(), "Visualizing Cartesian path (%.2f%% achieved)", fraction * 100.0);
-
+    
     publish_markers(waypoints);
-
+    
     // Plan ausführen
     moveit::planning_interface::MoveGroupInterface::Plan plan;
     plan.trajectory_ = trajectory;
@@ -157,10 +157,10 @@ void IKSolver::publish_markers(const std::vector<geometry_msgs::msg::Pose>& wayp
     path_marker.header.frame_id = "base_footprint";
     path_marker.header.stamp = this->now();
     path_marker.ns = "trajectory_path";
-    path_marker.id = 0;
+    path_marker.id = path_counter++;
     path_marker.type = visualization_msgs::msg::Marker::LINE_STRIP;
     path_marker.action = visualization_msgs::msg::Marker::ADD;
-    path_marker.scale.x = 0.015; // Line width
+    path_marker.scale.x = 0.012; // Line width
     path_marker.color.r = 0.0;
     path_marker.color.g = 1.0; 
     path_marker.color.b = 0.0;
@@ -170,7 +170,7 @@ void IKSolver::publish_markers(const std::vector<geometry_msgs::msg::Pose>& wayp
     for (const auto& pose : waypoints)
     {
         geometry_msgs::msg::Point point;
-        point.x = pose.position.x;
+        point.x = pose.position.x + 0.16;
         point.y = pose.position.y;
         point.z = pose.position.z;
         path_marker.points.push_back(point);
@@ -178,7 +178,6 @@ void IKSolver::publish_markers(const std::vector<geometry_msgs::msg::Pose>& wayp
     marker_array.markers.push_back(path_marker);
 
     // Create individual waypoints as spheres
-    int id_counter = 1;
     for (const auto& pose : waypoints)
     {
         visualization_msgs::msg::Marker waypoint_marker;
@@ -188,15 +187,15 @@ void IKSolver::publish_markers(const std::vector<geometry_msgs::msg::Pose>& wayp
         waypoint_marker.id = id_counter++;
         waypoint_marker.type = visualization_msgs::msg::Marker::SPHERE;
         waypoint_marker.action = visualization_msgs::msg::Marker::ADD;
-        waypoint_marker.scale.x = 0.015; // Sphere size
-        waypoint_marker.scale.y = 0.015;
-        waypoint_marker.scale.z = 0.015;
+        waypoint_marker.scale.x = 0.012; // Sphere size
+        waypoint_marker.scale.y = 0.012;
+        waypoint_marker.scale.z = 0.012;
         waypoint_marker.color.r = 0.0; 
         waypoint_marker.color.g = 0.0;
         waypoint_marker.color.b = 1.0;
         waypoint_marker.color.a = 1.0;
         waypoint_marker.pose = pose;
-
+        waypoint_marker.pose.position.x += 0.16;
         marker_array.markers.push_back(waypoint_marker);
     }
 
@@ -206,10 +205,10 @@ void IKSolver::publish_markers(const std::vector<geometry_msgs::msg::Pose>& wayp
 
 int main(int argc, char **argv)
 {
-rclcpp::init(argc, argv);
-auto ik_solver_node = std::make_shared<IKSolver>();
-ik_solver_node->initialize_move_group();
-rclcpp::spin(ik_solver_node);
-rclcpp::shutdown();
-return 0;
+    rclcpp::init(argc, argv);
+    auto ik_solver_node = std::make_shared<IKSolver>();
+    ik_solver_node->initialize_move_group();
+    rclcpp::spin(ik_solver_node);
+    rclcpp::shutdown();
+    return 0;
 }

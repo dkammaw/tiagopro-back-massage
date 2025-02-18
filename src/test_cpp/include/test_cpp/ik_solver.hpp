@@ -27,6 +27,8 @@ public:
     void publish_markers(const std::vector<geometry_msgs::msg::Pose>& waypoints);
 
 private:
+    int id_counter = 1;
+    int path_counter = 1;
     moveit::core::RobotModelPtr robot_model_;
     moveit::core::RobotStatePtr robot_state_;
     std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group;

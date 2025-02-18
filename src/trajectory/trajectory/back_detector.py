@@ -259,9 +259,7 @@ class BackDetector(Node):
 
         if back_points is not None:
             self.get_logger().info(f"Detected back region with {len(back_points)} points.")
-            # Publish the processed point cloud
-            self.publish_processed_pointcloud(back_points)
-            
+
             try:
                 # Start the subprocess
                 process = subprocess.Popen(['ros2', 'run', 'trajectory', 'move'])
@@ -271,6 +269,8 @@ class BackDetector(Node):
                 print("Process did not finish in 13 seconds. Continuing with other tasks.")
                 # Perform other tasks after the timeout
                 
+            # Publish the processed point cloud
+            self.publish_processed_pointcloud(back_points)
             # Calculate tapping positions
             self.calculate_tapping_positions(back_points)
 
@@ -442,8 +442,8 @@ class BackDetector(Node):
             marker.scale.x = 0.05  # Sphere diameter
             marker.scale.y = 0.05
             marker.scale.z = 0.05
-            marker.color.r = 0.0
-            marker.color.g = 1.0
+            marker.color.r = 1.0
+            marker.color.g = 0.0
             marker.color.b = 0.0
             marker.color.a = 1.0
             marker_array.markers.append(marker)
