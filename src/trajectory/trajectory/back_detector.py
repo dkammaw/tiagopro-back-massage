@@ -13,6 +13,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from tf2_ros import Buffer, TransformListener
 from scipy.spatial.transform import Rotation
 from sensor_msgs_py import point_cloud2 as pc2
+import subprocess
 
 class BackDetector(Node):
     def __init__(self):
@@ -55,7 +56,7 @@ class BackDetector(Node):
 
     def frame_transformation(self, msg):
         transform = self.tf_buffer.lookup_transform(
-            'base_link',  # Target frame
+            'base_footprint',  # Target frame
              msg.header.frame_id,  # Source frame
              rclpy.time.Time(),  # Time (use latest available)
              timeout=rclpy.duration.Duration(seconds=1.0)
@@ -89,7 +90,7 @@ class BackDetector(Node):
         ]
             
         pcl_header = msg.header
-        pcl_header.frame_id = "base_link"
+        pcl_header.frame_id = "base_footprint"
             
         # Create the PointCloud2 message
         return pc2.create_cloud(pcl_header, fields, points_transformed)
@@ -133,10 +134,9 @@ class BackDetector(Node):
         Publish processed point cloud data (e.g., back points) for RViz.
         """
         header = Header()
-        header.frame_id = 'base_link'  
+        header.frame_id = 'base_footprint'  
         
-        
-        points[:, 0] -= 0.8
+        points[:, 0] -= 0.84
 
         # Create a PointCloud2 message
         pointcloud_msg = create_cloud_xyz32(header, points.tolist())
@@ -261,8 +261,19 @@ class BackDetector(Node):
             self.get_logger().info(f"Detected back region with {len(back_points)} points.")
             # Publish the processed point cloud
             self.publish_processed_pointcloud(back_points)
+            
+            try:
+                # Start the subprocess
+                process = subprocess.Popen(['ros2', 'run', 'trajectory', 'move'])
+                # Wait for up to 13 seconds for the process to finish
+                process.wait(timeout=13)
+            except subprocess.TimeoutExpired:
+                print("Process did not finish in 13 seconds. Continuing with other tasks.")
+                # Perform other tasks after the timeout
+                
             # Calculate tapping positions
             self.calculate_tapping_positions(back_points)
+
         else:
             self.get_logger().info("No back points detected.")
 
@@ -417,9 +428,8 @@ class BackDetector(Node):
 
         marker_array = MarkerArray()
         for i, pos in enumerate(positions):
-            # Original marker
             marker = Marker()
-            marker.header.frame_id = "base_link"
+            marker.header.frame_id = "base_footprint"
             marker.header.stamp = self.get_clock().now().to_msg()
             marker.ns = "tapping_positions"
             marker.id = i
@@ -438,30 +448,8 @@ class BackDetector(Node):
             marker.color.a = 1.0
             marker_array.markers.append(marker)
 
-            # Shifted marker (+0.1 in x-direction)
-            shifted_marker = Marker()
-            shifted_marker.header.frame_id = "base_link"
-            shifted_marker.header.stamp = self.get_clock().now().to_msg()
-            shifted_marker.ns = "tapping_positions_shifted"
-            shifted_marker.id = i + 1000  # Ensure unique ID
-            shifted_marker.type = Marker.SPHERE
-            shifted_marker.action = Marker.ADD
-            shifted_marker.pose.position.x = float(pos[0]) - 0.085  # Shift in X
-            shifted_marker.pose.position.y = float(pos[1])
-            shifted_marker.pose.position.z = float(pos[2])
-            shifted_marker.pose.orientation.w = 1.0
-            shifted_marker.scale.x = 0.05
-            shifted_marker.scale.y = 0.05
-            shifted_marker.scale.z = 0.05
-            shifted_marker.color.r = 1.0  # Red color for differentiation
-            shifted_marker.color.g = 0.0
-            shifted_marker.color.b = 0.0
-            shifted_marker.color.a = 1.0
-            marker_array.markers.append(shifted_marker)
-
             # Log positions
             self.get_logger().info(f"Published marker {i} at position: x={pos[0]}, y={pos[1]}, z={pos[2]}")
-            self.get_logger().info(f"Published shifted marker {i} at position: x={pos[0] + 0.1}, y={pos[1]}, z={pos[2]}")
 
         # Publish all markers
         self.marker_publisher.publish(marker_array)

@@ -12,7 +12,7 @@ IKSolver::IKSolver() : Node("ik_solver")
 
 void IKSolver::initialize_move_group()
 {
-    move_group= std::make_shared<moveit::planning_interface::MoveGroupInterface>(this->shared_from_this(), "arm_left");
+    move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(this->shared_from_this(), "arm_left");
     robot_model_ = std::const_pointer_cast<moveit::core::RobotModel>(move_group->getRobotModel());
     robot_state_ = std::make_shared<moveit::core::RobotState>(robot_model_);
 }
@@ -36,7 +36,7 @@ void IKSolver::tapping_positions_callback(const std_msgs::msg::Float32MultiArray
     for (size_t i = 0; i < msg->data.size(); i += 3)
     {
         geometry_msgs::msg::Pose pose;
-        pose.position.x = msg->data[i] - 0.22;
+        pose.position.x = msg->data[i] - 0.18;
         pose.position.y = msg->data[i + 1];
         pose.position.z = msg->data[i + 2];
 
@@ -106,7 +106,7 @@ void IKSolver::plan_cartesian_path(geometry_msgs::msg::Pose start_pose, geometry
     // Trajektorie berechnen
     moveit_msgs::msg::RobotTrajectory trajectory;
     const double jump_threshold = 0.0;
-    const double eef_step = 0.01;
+    const double eef_step = 0.002;
     double fraction = move_group->computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
 
     RCLCPP_INFO(this->get_logger(), "Visualizing Cartesian path (%.2f%% achieved)", fraction * 100.0);
@@ -154,7 +154,7 @@ void IKSolver::publish_markers(const std::vector<geometry_msgs::msg::Pose>& wayp
 
     // Create marker for trajectory path
     visualization_msgs::msg::Marker path_marker;
-    path_marker.header.frame_id = "base_link";
+    path_marker.header.frame_id = "base_footprint";
     path_marker.header.stamp = this->now();
     path_marker.ns = "trajectory_path";
     path_marker.id = 0;
@@ -182,7 +182,7 @@ void IKSolver::publish_markers(const std::vector<geometry_msgs::msg::Pose>& wayp
     for (const auto& pose : waypoints)
     {
         visualization_msgs::msg::Marker waypoint_marker;
-        waypoint_marker.header.frame_id = "base_link";
+        waypoint_marker.header.frame_id = "base_footprint";
         waypoint_marker.header.stamp = this->now();
         waypoint_marker.ns = "waypoints";
         waypoint_marker.id = id_counter++;

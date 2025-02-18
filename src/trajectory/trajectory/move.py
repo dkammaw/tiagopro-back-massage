@@ -10,7 +10,7 @@ class MoveExactDistance(Node):
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
 
         self.initial_x = None
-        self.target_distance = 0.8  # 1 Meter vorwärts fahren (entpsricht der projection des rückens)
+        self.target_distance = 0.84  # 1 Meter vorwärts fahren (entpsricht der projection des rückens)
         self.speed = 0.25  # Geschwindigkeit in m/s
 
     def odom_callback(self, msg):
