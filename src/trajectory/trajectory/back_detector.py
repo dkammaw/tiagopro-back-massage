@@ -15,6 +15,9 @@ from scipy.spatial.transform import Rotation
 from sensor_msgs_py import point_cloud2 as pc2
 import subprocess
 import matplotlib.pyplot as plt
+from mayavi import mlab
+from sklearn.neighbors import NearestNeighbors
+from kneed import KneeLocator
 
 class BackDetector(Node):
     def __init__(self):
@@ -33,8 +36,6 @@ class BackDetector(Node):
         
         # Subscriptions
         self.create_subscription(PointCloud2, '/head_front_camera/depth/color/points', self.pointcloud_callback, qos_profile_best_effort)
-        # Comment out the following line to visualize human mask
-        # self.create_subscription(Image, '/head_front_camera/color/image_raw', self.image_callback, qos_profile_best_effort)
         
         # Publisher for tapping positions
         self.tapping_positions_pub = self.create_publisher(Float32MultiArray, '/tapping_positions', 10)
@@ -51,8 +52,6 @@ class BackDetector(Node):
         # Storage
         self.point_cloud = None
         self.rgb_image = None
-        self.human_mask = None
-        
         self.received_cloud = False
 
 
@@ -113,8 +112,6 @@ class BackDetector(Node):
             
             if self.point_cloud is not None and len(self.point_cloud) > 0:
                 self.get_logger().info(f"Received transformed point cloud with {len(self.point_cloud)} points.")
-                # if self.human_mask is not None:
-                    # self.filter_points_by_human_mask()
                 self.process_back_detection()
             else:
                 self.get_logger().info("No valid point cloud data received.")
@@ -138,15 +135,17 @@ class BackDetector(Node):
         """
         # Apply heuristic to extract back (e.g., points with vertical alignment)
         back_points = self.filter_vertical_points(self.point_cloud)
-        
+        self.paramter_selection(back_points)
+        '''
         # Select largest cluster (which is the Back)
         back_points = self.get_largest_cluster(back_points)
         
+        # Publish the processed point cloud
         self.publish_processed_pointcloud(back_points)
-        '''
+        
         if back_points is not None:
             self.get_logger().info(f"Detected back region with {len(back_points)} points.")
-
+            
             try:
                 # Start the subprocess of moving the robot towards the human
                 process = subprocess.Popen(['ros2', 'run', 'trajectory', 'move'])
@@ -154,9 +153,7 @@ class BackDetector(Node):
                 process.wait(timeout=13)
             except subprocess.TimeoutExpired:
                 print("Process did not finish in 13 seconds. Continuing with other tasks.")
-                
-            # Publish the processed point cloud
-            self.publish_processed_pointcloud(back_points)
+            
             # Calculate tapping positions
             self.calculate_tapping_positions(back_points)
         
@@ -229,10 +226,36 @@ class BackDetector(Node):
         largest_cluster_label = valid_labels[np.argmax(valid_counts)]
         largest_cluster_points = points[labels == largest_cluster_label]
 
-        self.visualize_clusters_3d(points, labels)
+        # self.visualize_clusters_3d(points, labels)
         
         return largest_cluster_points
     
+    def paramter_selection(self, points):
+        X = points
+        k = 2000  # Choose MinPts
+        
+        neigh = NearestNeighbors(n_neighbors=k)
+        neigh.fit(X)
+        distances, _ = neigh.kneighbors(X)
+
+        # Sort distances of k-th nearest neighbor
+        distances = np.sort(distances[:, k-1], axis=0)
+
+        # Apply KneeLocator to find the elbow point
+        kneedle = KneeLocator(np.arange(len(distances)), distances, curve="convex", direction="increasing")
+
+        # Plot
+        plt.plot(distances, label=f"{k}-th Nearest Neighbor Distance")
+        if kneedle.knee:
+            plt.axvline(x=kneedle.knee, color='r', linestyle="--", label=f"Elbow at {kneedle.knee_y:.3f}")
+
+        plt.xlabel("Points sorted by distance")
+        plt.ylabel(f"{k}-th Nearest Neighbor Distance")
+        plt.title("Elbow Method for Optimal Epsilon")
+        plt.legend()
+        plt.show()
+
+        print(f"Optimal Epsilon (eps) estimated by Kneedle: {kneedle.knee_y:.3f}")
 
     def visualize_clusters_3d(self, points, labels):
         """
@@ -252,7 +275,7 @@ class BackDetector(Node):
         ax.set_ylabel("Y-Axis")
         ax.set_zlabel("Z-Axis")
         ax.set_title("DBSCAN Clustering (3D)")
-        plt.legend(markerscale=3)
+        plt.legend(markerscale=5)
         plt.show()
 
 
@@ -342,16 +365,123 @@ class BackDetector(Node):
         # Publish markers for visualization in RViz
         self.publish_markers(tapping_positions)
         
-        # Visualize tapping positions
-        self.visualize_back(back_points, tapping_positions)
+        # Visualize results
+        self.visualize_pca_plane_matplot(back_points, tapping_positions, centroid, normal_vector, basis_vector1, basis_vector2)
+        
         self.get_logger().info(f"Tapping positions \n: {tapping_positions}")
         return tapping_positions
 
 
 
-    # VISUALIZATION
+ # VISUALIZATION
     #################################################################################################
     
+    
+    
+    def visualize_pca_plane_matplot(self, back_points, tapping_positions, centroid, normal, basis_vector1, basis_vector2):
+        """
+        Visualizes the PCA plane fitted to the back, along with the principal components and tapping positions.
+        """
+        fig = plt.figure(figsize=(12, 8))
+        ax = fig.add_subplot(111, projection='3d')
+
+        # Plot the back points (dimmed for contrast)
+        ax.scatter(back_points[:, 0], back_points[:, 1], back_points[:, 2], s=1, alpha=0.3, color="gray", label="Back Points")
+
+        # Plot tapping positions with a larger size, bright color, and edge
+        ax.scatter(
+            tapping_positions[:, 0], tapping_positions[:, 1], tapping_positions[:, 2], 
+            color='yellow', edgecolors='black', s=200, marker='o', label="Tapping Positions"
+        )
+
+        # Add text labels for tapping positions
+        for i, pos in enumerate(tapping_positions):
+            ax.text(pos[0], pos[1], pos[2], f"P{i}", color='black', fontsize=12, fontweight='bold')
+
+        # Define a plane based on the PCA normal
+        xlim = np.linspace(np.min(back_points[:, 0]), np.max(back_points[:, 0]), 10)
+        ylim = np.linspace(np.min(back_points[:, 1]), np.max(back_points[:, 1]), 10)
+        X, Y = np.meshgrid(xlim, ylim)
+
+        # Plane equation: ax + by + cz = d  --> solve for Z
+        d = np.dot(normal, centroid)
+        Z = (d - normal[0] * X - normal[1] * Y) / normal[2]
+
+        # Plot the PCA plane
+        ax.plot_surface(X, Y, Z, color='cyan', alpha=0.3)
+
+        # Plot the centroid
+        ax.scatter(centroid[0], centroid[1], centroid[2], color='black', s=150, marker='x', label="Centroid")
+
+        # Define vector scaling
+        vector_scale = 0.1  # Adjust for visibility
+
+        # Plot the PCA vectors with arrows
+        ax.quiver(*centroid, *(vector_scale * normal), color='blue', label="Normal Vector", linewidth=2)
+        ax.quiver(*centroid, *(vector_scale * basis_vector1), color='green', label="Basis Vector 1", linewidth=2)
+        ax.quiver(*centroid, *(vector_scale * basis_vector2), color='purple', label="Basis Vector 2", linewidth=2)
+
+        # Labels and title
+        ax.set_xlabel("X-Axis")
+        ax.set_ylabel("Y-Axis")
+        ax.set_zlabel("Z-Axis")
+        ax.set_title("Back Plane Approximation using PCA")
+        ax.legend()
+        
+        plt.show()
+        
+    def visualize_pca_plane_mayavi(self, back_points, tapping_positions, centroid, normal, basis_vector1, basis_vector2):
+        """
+        Visualizes the PCA plane fitted to the back using Mayavi, including principal components and tapping positions.
+        """
+        # Open a Mayavi figure
+        mlab.figure(size=(900, 700), bgcolor=(1, 1, 1))
+
+        # Plot back points (gray, semi-transparent for contrast)
+        mlab.points3d(back_points[:, 0], back_points[:, 1], back_points[:, 2], 
+                    mode="point", color=(0.5, 0.5, 0.5), opacity=0.3)
+
+        # Plot tapping positions (yellow spheres with black edges)
+        mlab.points3d(tapping_positions[:, 0], tapping_positions[:, 1], tapping_positions[:, 2], 
+                    scale_factor=0.02, color=(1, 1, 0), mode="sphere")
+
+        # Add text labels for tapping positions
+        for i, pos in enumerate(tapping_positions):
+            mlab.text3d(pos[0], pos[1], pos[2], f"P{i}", scale=0.02, color=(0, 0, 0))
+
+        # Compute PCA plane
+        xlim = np.linspace(np.min(back_points[:, 0]), np.max(back_points[:, 0]), 50)
+        ylim = np.linspace(np.min(back_points[:, 1]), np.max(back_points[:, 1]), 50)
+        X, Y = np.meshgrid(xlim, ylim)
+        
+        # Plane equation: ax + by + cz = d  --> solve for Z
+        d = np.dot(normal, centroid)
+        Z = (d - normal[0] * X - normal[1] * Y) / normal[2]
+
+        # Plot PCA plane (cyan, semi-transparent)
+        mlab.surf(X, Y, Z, color=(1, 0, 0), opacity=1.0)
+
+        # Plot centroid (black cross)
+        mlab.points3d(centroid[0], centroid[1], centroid[2], scale_factor=0.03, color=(0, 0, 0), mode="2dcross")
+
+        # Define vector scaling
+        vector_scale = 0.1
+
+        # Plot PCA vectors as arrows
+        mlab.quiver3d(centroid[0], centroid[1], centroid[2], 
+                    normal[0], normal[1], normal[2], 
+                    color=(0, 0, 1), scale_factor=vector_scale)
+        
+        mlab.quiver3d(centroid[0], centroid[1], centroid[2], 
+                    basis_vector1[0], basis_vector1[1], basis_vector1[2], 
+                    color=(0, 1, 0), scale_factor=vector_scale)
+        
+        mlab.quiver3d(centroid[0], centroid[1], centroid[2], 
+                    basis_vector2[0], basis_vector2[1], basis_vector2[2], 
+                    color=(1, 0, 1), scale_factor=vector_scale)
+
+        # Show the plot
+        mlab.show()
     
     
     def publish_markers(self, positions):
@@ -385,41 +515,6 @@ class BackDetector(Node):
 
         # Publish all markers
         self.marker_publisher.publish(marker_array)
-
-    
-    def visualize_back(self, back_points, tapping_positions):
-        """
-        Visualize the tapping positions in 3D along with the back points.
-        """
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-
-        # Plot back points with lower z-order to ensure tapping positions are on top
-        ax.scatter(
-            back_points[:, 0], back_points[:, 1], back_points[:, 2],
-            c='b', alpha=0.5, label='Back Points', zorder=1
-        )
-
-        # Plot tapping positions with larger markers and a higher z-order
-        ax.scatter(
-            tapping_positions[:, 0],
-            tapping_positions[:, 1],
-            tapping_positions[:, 2],
-            c='r', marker='o', s=200, label='Tapping Positions', zorder=2
-        )
-
-        # Annotate tapping positions
-        for i, pos in enumerate(tapping_positions):
-            ax.text(
-                pos[0], pos[1], pos[2], f'P{i+1}',
-                color='red', fontsize=14, fontweight='bold', zorder=3
-            )
-
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
-        ax.legend()
-        plt.show()
 
 
 
