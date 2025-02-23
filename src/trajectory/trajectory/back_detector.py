@@ -1,6 +1,6 @@
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import Image, PointCloud2, PointField
+from sensor_msgs.msg import PointCloud2, PointField
 from visualization_msgs.msg import Marker, MarkerArray
 from cv_bridge import CvBridge
 import cv2
@@ -14,6 +14,7 @@ from tf2_ros import Buffer, TransformListener
 from scipy.spatial.transform import Rotation
 from sensor_msgs_py import point_cloud2 as pc2
 import subprocess
+import matplotlib.pyplot as plt
 
 class BackDetector(Node):
     def __init__(self):
@@ -32,7 +33,8 @@ class BackDetector(Node):
         
         # Subscriptions
         self.create_subscription(PointCloud2, '/head_front_camera/depth/color/points', self.pointcloud_callback, qos_profile_best_effort)
-        #self.create_subscription(Image, '/head_front_camera/color/image_raw', self.image_callback, qos_profile_best_effort)
+        # Comment out the following line to visualize human mask
+        # self.create_subscription(Image, '/head_front_camera/color/image_raw', self.image_callback, qos_profile_best_effort)
         
         # Publisher for tapping positions
         self.tapping_positions_pub = self.create_publisher(Float32MultiArray, '/tapping_positions', 10)
@@ -55,6 +57,9 @@ class BackDetector(Node):
 
 
     def frame_transformation(self, msg):
+        """
+        Transform the point cloud from the camera frame into base_footprint frame.
+        """
         transform = self.tf_buffer.lookup_transform(
             'base_footprint',  # Target frame
              msg.header.frame_id,  # Source frame
@@ -96,212 +101,95 @@ class BackDetector(Node):
         return pc2.create_cloud(pcl_header, fields, points_transformed)
 
 
-
     def pointcloud_callback(self, msg):
+        """
+        Callback function for receiving the point cloud from the RGBD camera.
+        """
         if self.received_cloud == False:
             pcl_msg = self.frame_transformation(msg)
             
             # Converts pc to array
             self.point_cloud  = pc2.read_points_numpy(pcl_msg, field_names=("x", "y", "z"), skip_nans=True)
-            # Downsamples pc
-            self.point_cloud = self.voxel_grid_filter(self.point_cloud, 0.014)
             
             if self.point_cloud is not None and len(self.point_cloud) > 0:
                 self.get_logger().info(f"Received transformed point cloud with {len(self.point_cloud)} points.")
                 # if self.human_mask is not None:
                     # self.filter_points_by_human_mask()
-                #self.publish_processed_pointcloud(self.point_cloud)
                 self.process_back_detection()
             else:
                 self.get_logger().info("No valid point cloud data received.")
         
         self.received_cloud = True 
             
+            
     def image_callback(self, msg):
+        """
+        Callback function for receiving the rgb-image from the RGBD camera.
+        """
         # Convert ROS Image message to OpenCV format
         self.rgb_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-        # self.detect_human_from_rgb(self.rgb_image)
+        self.detect_human_from_rgb(self.rgb_image)
               
-
-
-    # VISUAL RECOGNITION
-    #########################################################################################################
-
-
-
-    def publish_processed_pointcloud(self, points):
-        """
-        Publish processed point cloud data (e.g., back points) for RViz.
-        """
-        header = Header()
-        header.frame_id = 'base_footprint'  
-        
-        points[:, 0] -= 0.84
-
-        # Create a PointCloud2 message
-        pointcloud_msg = create_cloud_xyz32(header, points.tolist())
-        # Transform in target frame
-        self.back_cloud_pub.publish(pointcloud_msg)
-        self.get_logger().info("Published processed point cloud.")
-           
-    
-    def voxel_grid_filter(self, points, voxel_size):
-        """
-        Downsample the point cloud using a voxel grid filter.
-        """
-        # Calculate voxel indices for each point
-        voxel_indices = np.floor(points / voxel_size).astype(np.int32)
-        # Use a dictionary to keep track of unique voxels
-        unique_voxels = {}
-        for i, voxel in enumerate(map(tuple, voxel_indices)):
-            unique_voxels[voxel] = i
-        # Get unique points based on voxel indices
-        unique_indices = list(unique_voxels.values())
-        return points[unique_indices]
-  
-    
-    def detect_human_from_rgb(self, image):
-        """
-        Detect human in the RGB image by combining skin and clothing segmentation.
-        """
-        # Convert to HSV
-        hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-
-        # Detect skin
-        lower_skin = np.array([0, 15, 40], dtype=np.uint8)
-        upper_skin = np.array([35, 170, 255], dtype=np.uint8)
-        skin_mask = cv2.inRange(hsv_image, lower_skin, upper_skin)
-
-        # Detect clothing (example: dark and light clothing ranges)
-        lower_clothes_dark = np.array([0, 0, 10], dtype=np.uint8)
-        upper_clothes_dark = np.array([180, 255, 40], dtype=np.uint8)
-
-        lower_clothes_light = np.array([0, 0, 200], dtype=np.uint8)
-        upper_clothes_light = np.array([180, 50, 255], dtype=np.uint8)
-
-        clothes_dark_mask = cv2.inRange(hsv_image, lower_clothes_dark, upper_clothes_dark)
-        clothes_light_mask = cv2.inRange(hsv_image, lower_clothes_light, upper_clothes_light)
-
-        # Combine masks
-        combined_mask = cv2.bitwise_or(skin_mask, clothes_dark_mask)
-        combined_mask = cv2.bitwise_or(combined_mask, clothes_light_mask)
-
-        # Morphological operations to clean up the mask
-        combined_mask = cv2.morphologyEx(combined_mask, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))
-        combined_mask = cv2.dilate(combined_mask, np.ones((5, 5), np.uint8), iterations=2)
-
-        # Find contours
-        contours, _ = cv2.findContours(combined_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if len(contours) == 0:
-            return None
-
-        # Create a mask for the detected human
-        human_mask = np.zeros_like(combined_mask)
-        cv2.drawContours(human_mask, contours, -1, 255, thickness=cv2.FILLED)
-
-        self.visualize_human_mask(human_mask)
-        
-        return human_mask
-    
-    
-    def visualize_human_mask(self, human_mask):
-        
-        if human_mask is None:
-            self.get_logger().info("No human detected in RGB image.")
-            return
-        else:
-            contours, _ = cv2.findContours(human_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            if contours:
-                cv2.drawContours(self.rgb_image, contours, -1, (0, 255, 0), 2)
-            cv2.imshow("RGB with Human Detection", self.rgb_image)
-            cv2.waitKey(1)
-
-        # Visualize the human detection result
-        cv2.imshow("Human Detection Mask", human_mask)
-        cv2.waitKey(1)
-        
-    def filter_points_by_human_mask(self):
-        """
-        Filter the point cloud based on the human mask.
-        """
-        # This assumes you have camera intrinsic parameters like focal length, principal point
-        # In practice, you'll use the camera's calibration parameters
-        fx, fy = 462.1379699707031, 462.1379699707031  # Example focal length values
-        cx, cy = 320, 240  # Example principal point values
-
-        # Project point cloud into image plane
-        uv_points = []
-        for point in self.point_cloud:
-            x, y, z = point
-            u = int(fx * x / z + cx)
-            v = int(fy * y / z + cy)
-
-            if 0 <= u < self.rgb_image.shape[1] and 0 <= v < self.rgb_image.shape[0]:
-                if self.human_mask[v, u] > 0:  # Check if the point is within the human region
-                    uv_points.append(point)
-
-        self.point_cloud = np.array(uv_points)
-        self.get_logger().info(f"Filtered point cloud size: {len(self.point_cloud)}")
-        
-    
-    # BACK PROCESSING
-    #########################################################################################################
-    
     
     
     def process_back_detection(self):
-        
+        """
+        Identify points corresponding to the back by filtering based on their alignment.
+        """
         # Apply heuristic to extract back (e.g., points with vertical alignment)
         back_points = self.filter_vertical_points(self.point_cloud)
         
         # Select largest cluster (which is the Back)
         back_points = self.get_largest_cluster(back_points)
-
+        
+        self.publish_processed_pointcloud(back_points)
+        '''
         if back_points is not None:
             self.get_logger().info(f"Detected back region with {len(back_points)} points.")
 
             try:
-                # Start the subprocess
+                # Start the subprocess of moving the robot towards the human
                 process = subprocess.Popen(['ros2', 'run', 'trajectory', 'move'])
                 # Wait for up to 13 seconds for the process to finish
                 process.wait(timeout=13)
             except subprocess.TimeoutExpired:
                 print("Process did not finish in 13 seconds. Continuing with other tasks.")
-                # Perform other tasks after the timeout
                 
             # Publish the processed point cloud
             self.publish_processed_pointcloud(back_points)
             # Calculate tapping positions
             self.calculate_tapping_positions(back_points)
-
+        
         else:
-            self.get_logger().info("No back points detected.")
+            self.get_logger().info("No back points detected.")'''
+        
 
-
+        
     def filter_vertical_points(self, points):
         """
         Identify points corresponding to the back by filtering based on their alignment.
         """
-        # Define the ranges for filtering based on the assumed coordinate system:
-        # Z is height (vertical), Y is depth (front-back), X is width (side-to-side)
-        
-        z_min, z_max = 0.2, 1.0    # Height range (vertical, in meters) - adjust based on the expected back height
-        x_min, x_max = 0.0, 10.0   # Depth range (front-back, in meters) - adjust based on the body depth
-        y_min, y_max = -0.2, 0.1   # Width range (side-to-side, in meters) - adjust based on the body width
+        # Define the ranges for filtering based on the coordinate system:
+        # Z is height (vertical), X is depth (front-back), Y is width (side-to-side)
+
+        y_min, y_max = -0.3, 0.3   # Width range (side-to-side, in meters) - adjust based on the body width
            
+        # Filtering for width (y-coordinate)
+        filtered_points = points[(points[:, 1] > y_min) & (points[:, 1] < y_max)]
+        self.get_logger().info(f"Filtered by Y axes: {len(filtered_points)} points remaining.")
         
-        # Filter based on height (z-coordinate)
-        filtered_points = points[(points[:, 2] > z_min) & (points[:, 2] < z_max)]
+        z_min, z_max = 0.5, filtered_points[:, 2].max()    # Height range (vertical, in meters) - adjust based on the expected back height
+
+        # Filtering for height (z-coordinate)
+        filtered_points = filtered_points[(filtered_points[:, 2] > z_min) & (filtered_points[:, 2] < z_max)]
         self.get_logger().info(f"Filtered by Z-axis: {len(filtered_points)} points remaining.")
         
-        # Additional filtering for width (x-coordinate) and depth (y-coordinate)
-        filtered_points = filtered_points[
-            (filtered_points[:, 0] > x_min) & (filtered_points[:, 0] < x_max) &
-            (filtered_points[:, 1] > y_min) & (filtered_points[:, 1] < y_max)
-        ]
+        x_min, x_max = filtered_points[:, 0].min(), filtered_points[:, 0].min() + 0.3   # Depth range (front-back, in meters) - adjust based on the body depth
         
-        self.get_logger().info(f"Filtered by X and Y axes: {len(filtered_points)} points remaining.")
-
+        # Filter for depth (x-coordinate)
+        filtered_points = filtered_points[(filtered_points[:, 0] > x_min) & (filtered_points[:, 0] < x_max)]
+        self.get_logger().info(f"Filtered by X-axis: {len(filtered_points)} points remaining.")
+        
         # Logging for debugging
         if len(filtered_points) > 0:
             x_range = (filtered_points[:, 0].min(), filtered_points[:, 0].max())
@@ -313,14 +201,16 @@ class BackDetector(Node):
             )
         else:
             self.get_logger().info("No points in the filtered range.")
-
+        
         return filtered_points
 
 
     def get_largest_cluster(self, points):
-
+        """
+        Remove noise and outlier points by clustering and selecting the largest cluster (the back).
+        """
         # Cluster the points
-        clustering = DBSCAN(eps=0.05, min_samples=45).fit(points)
+        clustering = DBSCAN(eps=0.065, min_samples=2000).fit(points)
         labels = clustering.labels_
 
         # Calculate the cluster sizes
@@ -339,16 +229,57 @@ class BackDetector(Node):
         largest_cluster_label = valid_labels[np.argmax(valid_counts)]
         largest_cluster_points = points[labels == largest_cluster_label]
 
+        self.visualize_clusters_3d(points, labels)
+        
         return largest_cluster_points
+    
 
+    def visualize_clusters_3d(self, points, labels):
+        """
+        Visualizes clusters in 3D using Matplotlib.
+        """
+        unique_labels = np.unique(labels)
+        colors = plt.cm.jet(np.linspace(0, 1, len(unique_labels)))
+
+        fig = plt.figure(figsize=(10, 7))
+        ax = fig.add_subplot(111, projection='3d')
+
+        for label, color in zip(unique_labels, colors):
+            mask = labels == label
+            ax.scatter(points[mask, 0], points[mask, 1], points[mask, 2], c=[color], label=f"Cluster {label}" if label != -1 else "Noise", s=1)
+
+        ax.set_xlabel("X-Axis")
+        ax.set_ylabel("Y-Axis")
+        ax.set_zlabel("Z-Axis")
+        ax.set_title("DBSCAN Clustering (3D)")
+        plt.legend(markerscale=3)
+        plt.show()
+
+
+    def publish_processed_pointcloud(self, points):
+        """
+        Publish processed point cloud data for RViz.
+        """
+        header = Header()
+        header.frame_id = 'base_footprint'  
         
+        # Project the points to the robot in x-direction
+        points[:, 0] -= 0.84
+
+        # Create a PointCloud2 message
+        pointcloud_msg = create_cloud_xyz32(header, points.tolist())
         
+        # Publish the point cloud for visualization
+        self.back_cloud_pub.publish(pointcloud_msg)
+        self.get_logger().info("Published processed point cloud.")   
+        
+
 
     # TAPPING POSITIONS   
     ###########################################################################################################   
         
-    
         
+    
     def calculate_tapping_positions(self, back_points):
         """
         Calculate six tapping positions on the back that correspond to actual points in the back_points.
@@ -399,7 +330,7 @@ class BackDetector(Node):
 
         tapping_positions = np.array(tapping_positions)
         
-         # Reorder positions as [5, 4, 3, 0, 1, 2]
+         # Reorder positions as for the desired tapping order [5, 4, 3, 0, 1, 2]
         ordered_indices = [5, 4, 3, 0, 1, 2]
         tapping_positions = tapping_positions[ordered_indices]
         
@@ -412,20 +343,21 @@ class BackDetector(Node):
         self.publish_markers(tapping_positions)
         
         # Visualize tapping positions
-        # self.visualize_back(back_points, tapping_positions)
+        self.visualize_back(back_points, tapping_positions)
         self.get_logger().info(f"Tapping positions \n: {tapping_positions}")
         return tapping_positions
+
 
 
     # VISUALIZATION
     #################################################################################################
     
     
+    
     def publish_markers(self, positions):
         """
-        Publish RViz markers for the tapping positions, including duplicates shifted in x-direction by 0.1.
+        Publish RViz markers for the tapping positions.
         """
-
         marker_array = MarkerArray()
         for i, pos in enumerate(positions):
             marker = Marker()
@@ -459,9 +391,6 @@ class BackDetector(Node):
         """
         Visualize the tapping positions in 3D along with the back points.
         """
-        import matplotlib.pyplot as plt
-        from mpl_toolkits.mplot3d import Axes3D
-
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
 
@@ -485,7 +414,6 @@ class BackDetector(Node):
                 pos[0], pos[1], pos[2], f'P{i+1}',
                 color='red', fontsize=14, fontweight='bold', zorder=3
             )
-
 
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
