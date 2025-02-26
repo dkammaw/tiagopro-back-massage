@@ -19,6 +19,7 @@ add_library(fk_solver_lib src/fk_solver.cpp)
 # Existing executables
 add_executable(nullspace_explorer src/nullspace_explorer.cpp)
 add_executable(ik_solver src/ik_solver.cpp)
+add_executable(test_interpolator src/test_interpolator.cpp)
 
 target_link_libraries(nullspace_explorer fk_solver_lib)
 
@@ -27,6 +28,14 @@ ament_target_dependencies(
     rclcpp 
     moveit_core
     moveit_ros_planning_interface
+)
+
+ament_target_dependencies(
+    test_interpolator
+    rclcpp 
+    moveit_core
+    moveit_ros_planning_interface
+    control_msgs
 )
 
 ament_target_dependencies(
@@ -47,6 +56,7 @@ ament_target_dependencies(
 
 # Install executables
 install(TARGETS
+    test_interpolator
     nullspace_explorer
     ik_solver
     fk_solver_lib

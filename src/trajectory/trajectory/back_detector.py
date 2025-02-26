@@ -135,8 +135,8 @@ class BackDetector(Node):
         """
         # Apply heuristic to extract back (e.g., points with vertical alignment)
         back_points = self.filter_vertical_points(self.point_cloud)
-        self.paramter_selection(back_points)
-        '''
+        # self.paramter_selection(back_points)
+        
         # Select largest cluster (which is the Back)
         back_points = self.get_largest_cluster(back_points)
         
@@ -149,16 +149,16 @@ class BackDetector(Node):
             try:
                 # Start the subprocess of moving the robot towards the human
                 process = subprocess.Popen(['ros2', 'run', 'trajectory', 'move'])
-                # Wait for up to 13 seconds for the process to finish
-                process.wait(timeout=13)
+                # Wait for up to 15 seconds for the process to finish
+                process.wait(timeout=15)
             except subprocess.TimeoutExpired:
-                print("Process did not finish in 13 seconds. Continuing with other tasks.")
+                print("Process did not finish in 15 seconds. Continuing with other tasks.")
             
             # Calculate tapping positions
             self.calculate_tapping_positions(back_points)
         
         else:
-            self.get_logger().info("No back points detected.")'''
+            self.get_logger().info("No back points detected.")
         
 
         
@@ -324,7 +324,7 @@ class BackDetector(Node):
         # Normalize the basis vectors
         basis_vector1 /= np.linalg.norm(basis_vector1)
         basis_vector2 /= np.linalg.norm(basis_vector2)
-
+        
         # Project all back points onto the plane
         back_points_on_plane = []
         for point in back_points:
@@ -334,27 +334,27 @@ class BackDetector(Node):
             projected_point = point - distance_to_plane * normal_vector
             back_points_on_plane.append(projected_point)
         back_points_on_plane = np.array(back_points_on_plane)
-
+        
         # Define offsets for the rows and columns
-        row_offsets = [-0.05, 0.05]   # Vertical offsets (three rows)
-        col_offsets = np.linspace(-0.1, 0.1, 3)  # Horizontal offsets (two columns)
+        row_offsets = [-0.1, 0.0, 0.1]   # Vertical offsets (three rows)
+        col_offsets = [-0.05, 0.05]  # Horizontal offsets (two columns)
 
         # Calculate candidate tapping positions
         tapping_positions = []
         for row_offset in row_offsets:
             for col_offset in col_offsets:
-                offset = row_offset * basis_vector2 + col_offset * basis_vector1
+                offset = row_offset * basis_vector1 + col_offset * basis_vector2
                 candidate_position = centroid + offset
-
                 # Find the closest back point on the plane
                 distances = np.linalg.norm(back_points_on_plane - candidate_position, axis=1)
                 closest_point_idx = np.argmin(distances)
                 tapping_positions.append(back_points[closest_point_idx])  # Use the original point
-
+                
         tapping_positions = np.array(tapping_positions)
         
-         # Reorder positions as for the desired tapping order [5, 4, 3, 0, 1, 2]
-        ordered_indices = [5, 4, 3, 0, 1, 2]
+         # Reorder positions as for the desired tapping order [5, 3, 1, 0, 2, 4]
+
+        ordered_indices = [5, 4, 2, 3, 0, 1]
         tapping_positions = tapping_positions[ordered_indices]
         
         # Publish tapping positions
@@ -366,7 +366,7 @@ class BackDetector(Node):
         self.publish_markers(tapping_positions)
         
         # Visualize results
-        self.visualize_pca_plane_matplot(back_points, tapping_positions, centroid, normal_vector, basis_vector1, basis_vector2)
+        # self.visualize_pca_plane_mayavi(back_points, tapping_positions, centroid, normal_vector, basis_vector1, basis_vector2)
         
         self.get_logger().info(f"Tapping positions \n: {tapping_positions}")
         return tapping_positions
