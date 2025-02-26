@@ -5,6 +5,8 @@
 #include <moveit/robot_state/conversions.h>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include "test_cpp/nullspace_exploration.hpp"
+
 
 class InterpolationTestNode : public rclcpp::Node
 {
@@ -15,14 +17,16 @@ public:
         // Abonnieren des Robot State Topics
         subscription_ = this->create_subscription<moveit_msgs::msg::RobotState>(
             "robot_state_topic", 10, std::bind(&InterpolationTestNode::robot_state_callback, this, std::placeholders::_1));
+
     }
 
 
     void initialize()
     {
+        nullspace_explorer_ = std::make_shared<NullspaceExplorationNode>();
         move_group_ = std::make_shared<moveit::planning_interface::MoveGroupInterface>(this->shared_from_this(), "arm_left");
         robot_model_ = move_group_->getRobotModel();
-        joint_model_group_ = robot_model_->getJointModelGroup("arm_left");
+        jmg_ = robot_model_->getJointModelGroup("arm_left");
         robot_state_ = std::make_shared<moveit::core::RobotState>(robot_model_);
 
     }
@@ -42,9 +46,12 @@ public:
 private:
     std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group_;
     moveit::core::RobotModelConstPtr robot_model_;
-    const moveit::core::JointModelGroup* joint_model_group_;
+    const moveit::core::JointModelGroup* jmg_;
     std::shared_ptr<moveit::core::RobotState> robot_state_;
     rclcpp::Subscription<moveit_msgs::msg::RobotState>::SharedPtr subscription_;
+    std::shared_ptr<NullspaceExplorationNode> nullspace_explorer_;
+
+
 
     void interpolateAndExecute(const moveit::core::RobotState& start_state)
     {
@@ -76,7 +83,7 @@ private:
             std::vector<double> planned_joint_values = plan.trajectory_.joint_trajectory.points.back().positions;
 
             // Apply the planned joint values to end_state
-            end_state.setJointGroupPositions(joint_model_group_, planned_joint_values);
+            end_state.setJointGroupPositions(jmg_, planned_joint_values);
 
             RCLCPP_INFO(this->get_logger(), "Stored IK solution in end_state.");
         }
@@ -85,12 +92,10 @@ private:
             RCLCPP_ERROR(this->get_logger(), "IK solution not found!");
         }
 
-        /*
-        std::vector<double> target_joint_positions = {0.73, -0.77, -0.72, -1.89, -0.12, -0.4, -0.82};
-        end_state.setJointGroupPositions(joint_model_group_, target_joint_positions);
-        */
 
+        end_state = nullspace_explorer_->explore(end_state);
 
+        
         std::vector<moveit::core::RobotStatePtr> interpolated_states;
         const int num_waypoints = 10;
         for (int i = 0; i <= num_waypoints; ++i)
@@ -102,12 +107,12 @@ private:
         }
 
         moveit_msgs::msg::RobotTrajectory trajectory;
-        trajectory.joint_trajectory.joint_names = joint_model_group_->getVariableNames();
+        trajectory.joint_trajectory.joint_names = jmg_->getVariableNames();
 
         for (size_t i = 0; i < interpolated_states.size(); ++i)
         {
             trajectory_msgs::msg::JointTrajectoryPoint point;
-            interpolated_states[i]->copyJointGroupPositions(joint_model_group_, point.positions);
+            interpolated_states[i]->copyJointGroupPositions(jmg_, point.positions);
             point.time_from_start = rclcpp::Duration::from_seconds(i * 0.2);
             trajectory.joint_trajectory.points.push_back(point);
         }
@@ -117,8 +122,12 @@ private:
 
 
         RCLCPP_INFO(this->get_logger(), "Führe interpolierte Bewegung aus...");
+        // Apply global velocity scaling (optional)
+        move_group_->setMaxVelocityScalingFactor(0.1);  // 30% of max speed
+        move_group_->setMaxAccelerationScalingFactor(0.1);
         move_group_->execute(plan2);
     }
+
 };
 
 int main(int argc, char** argv)

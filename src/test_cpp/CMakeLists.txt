@@ -15,13 +15,13 @@ find_package(control_msgs REQUIRED)
 
 # Erstelle eine Bibliothek für den FKSolver
 add_library(fk_solver_lib src/fk_solver.cpp)
+add_library(nullspace_explorer_lib src/nullspace_explorer.cpp)
 
 # Existing executables
-add_executable(nullspace_explorer src/nullspace_explorer.cpp)
 add_executable(ik_solver src/ik_solver.cpp)
 add_executable(test_interpolator src/test_interpolator.cpp)
 
-target_link_libraries(nullspace_explorer fk_solver_lib)
+target_link_libraries(test_interpolator nullspace_explorer_lib)
 
 ament_target_dependencies(
     ik_solver
@@ -39,7 +39,7 @@ ament_target_dependencies(
 )
 
 ament_target_dependencies(
-    nullspace_explorer
+    nullspace_explorer_lib
     rclcpp 
     moveit_core
     moveit_ros_planning_interface
@@ -57,14 +57,15 @@ ament_target_dependencies(
 # Install executables
 install(TARGETS
     test_interpolator
-    nullspace_explorer
+    nullspace_explorer_lib
     ik_solver
     fk_solver_lib
     DESTINATION lib/${PROJECT_NAME}
 )
 
 target_include_directories(ik_solver PUBLIC include ${rclcpp_INCLUDE_DIRS})
-target_include_directories(nullspace_explorer PUBLIC include ${rclcpp_INCLUDE_DIRS})
+target_include_directories(test_interpolator PUBLIC include ${rclcpp_INCLUDE_DIRS})
+target_include_directories(nullspace_explorer_lib PUBLIC include ${rclcpp_INCLUDE_DIRS})
 target_include_directories(fk_solver_lib PUBLIC include ${rclcpp_INCLUDE_DIRS})
 
 

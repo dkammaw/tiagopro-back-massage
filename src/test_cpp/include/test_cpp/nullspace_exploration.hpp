@@ -19,9 +19,6 @@
 // Standard ROS messages
 #include <std_msgs/msg/float64_multi_array.hpp>
 
-// FKSolver als Abhängigkeit
-#include "fk_solver.hpp" // Falls dein FKSolver in einer separaten Datei definiert ist
-
 // Nullspace Exploration Funktionen
 Eigen::MatrixXd computeNullspace(const moveit::core::RobotState& robot_state, 
                                  const moveit::core::JointModelGroup* jmg);
@@ -43,7 +40,7 @@ public:
     NullspaceExplorationNode();
     void initialize_move_group();
     void robot_state_callback(const moveit_msgs::msg::RobotState::SharedPtr msg);
-    void explore(moveit::core::RobotState& current_state);
+    moveit::core::RobotState explore(moveit::core::RobotState& current_state);
 
 private:
     moveit::core::RobotModelPtr robot_model_;
@@ -52,7 +49,6 @@ private:
     std::shared_ptr<kinematics_metrics::KinematicsMetrics> kinematics_metrics_;
     std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group_interface_;
     rclcpp::Subscription<moveit_msgs::msg::RobotState>::SharedPtr subscription_;
-    std::shared_ptr<FKSolver> fk_solver_;
 };
 
 #endif // NULLSPACE_EXPLORATION_HPP

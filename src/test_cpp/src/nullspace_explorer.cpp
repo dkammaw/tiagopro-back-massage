@@ -4,17 +4,11 @@
 NullspaceExplorationNode::NullspaceExplorationNode() : Node("nullspace_exploration")
 {
     RCLCPP_INFO(this->get_logger(), "Node initialized.");
-    
-    // Abonnieren des Robot State Topics
-    subscription_ = this->create_subscription<moveit_msgs::msg::RobotState>(
-        "robot_state_topic", 10, std::bind(&NullspaceExplorationNode::robot_state_callback, this, std::placeholders::_1));
-
 }
 
 // MoveGroup initialisieren
 void NullspaceExplorationNode::initialize_move_group()
 {
-    fk_solver_ = std::make_shared<FKSolver>(this->shared_from_this());
     move_group_interface_ = std::make_shared<moveit::planning_interface::MoveGroupInterface>(shared_from_this(), "arm_left");
     kinematics_metrics_ = std::make_shared<kinematics_metrics::KinematicsMetrics>(move_group_interface_->getRobotModel());
     robot_model_ = std::const_pointer_cast<moveit::core::RobotModel>(move_group_interface_->getRobotModel());
@@ -28,50 +22,37 @@ void NullspaceExplorationNode::initialize_move_group()
     }
 }
 
-// Callback für den Robot State
-void NullspaceExplorationNode::robot_state_callback(const moveit_msgs::msg::RobotState::SharedPtr msg)
+
+// Nullspace-Exploration und Ausgabe der besten Konfiguration
+moveit::core::RobotState NullspaceExplorationNode::explore(moveit::core::RobotState& current_state)
 {
-    moveit::core::RobotState current_state(robot_model_);
-    robotStateMsgToRobotState(*msg, current_state);
+    initialize_move_group();
+    std::vector<double> joint_values;
+    current_state.copyJointGroupPositions(jmg_, joint_values);
     
-    double manipulability_index = 0.0;
+    double manipulability_index;
     if (kinematics_metrics_->getManipulabilityIndex(current_state, jmg_, manipulability_index, false))
     {
         RCLCPP_INFO(this->get_logger(), "Initial Manipulability Index: %f", manipulability_index);
-        explore(current_state);
-    }
-    else
-    {
+    } else {
         RCLCPP_ERROR(this->get_logger(), "Failed to calculate Manipulability Index");
-    }
-}
-
-// Nullspace-Exploration und Ausgabe der besten Konfiguration
-void NullspaceExplorationNode::explore(moveit::core::RobotState& current_state)
-{
-    std::vector<double> joint_values;
-    current_state.copyJointGroupPositions(jmg_, joint_values);
-
-    double manipulability_index;
-    if (!kinematics_metrics_->getManipulabilityIndex(current_state, jmg_, manipulability_index, false))
-    {
-        RCLCPP_ERROR(this->get_logger(), "Failed to compute manipulability index.");
-        return;
     }
 
     Eigen::VectorXd best_config = Eigen::Map<Eigen::VectorXd>(joint_values.data(), joint_values.size());
 
+
     // Start der rekursiven Nullspace-Exploration
     best_config = recursiveNullspaceExploration(current_state, jmg_, kinematics_metrics_, manipulability_index, best_config);
+
 
     std::vector<double> best_config_vec(best_config.data(), best_config.data() + best_config.size());
     current_state.setJointGroupPositions(jmg_, best_config_vec);
 
     RCLCPP_INFO_STREAM(get_logger(), "Final best_config: \n" << best_config);
 
-    fk_solver_->execute_trajectory(best_config_vec);
-
     RCLCPP_INFO(this->get_logger(), "Updated robot state to best configuration found with highest manipulability.");
+    
+    return current_state;
 }
 
 // Berechnung der Nullspace-Matrix
@@ -172,15 +153,4 @@ Eigen::VectorXd gridSearch(moveit::core::RobotState& robot_state,
 
     // RCLCPP_INFO(rclcpp::get_logger("nullspace_exploration"), "Best configuration found with highest manipulability index: %f", best_manipulability);
     return best_config;
-}
-
-// Hauptfunktion
-int main(int argc, char** argv)
-{
-    rclcpp::init(argc, argv);
-    auto node = std::make_shared<NullspaceExplorationNode>();
-    node->initialize_move_group();
-    rclcpp::spin_some(node);
-    rclcpp::shutdown();
-    return 0;
 }
