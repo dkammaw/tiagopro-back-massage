@@ -29,7 +29,7 @@ moveit::core::RobotState NullspaceExplorationNode::explore(moveit::core::RobotSt
     initialize_move_group();
     std::vector<double> joint_values;
     current_state.copyJointGroupPositions(jmg_, joint_values);
-    
+
     double manipulability_index;
     if (kinematics_metrics_->getManipulabilityIndex(current_state, jmg_, manipulability_index, false))
     {

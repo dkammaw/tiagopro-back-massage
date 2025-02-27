@@ -62,6 +62,8 @@
     "thread": "cpp",
     "typeinfo": "cpp",
     "variant": "cpp",
-    "iostream": "cpp"
+    "iostream": "cpp",
+    "condition_variable": "cpp",
+    "mutex": "cpp"
 }
 }

@@ -11,8 +11,14 @@ def generate_launch_description():
         ),
         Node(
             package='test_cpp',
-            executable='ik_solver',
-            name='ik_solver',
+            executable='test_interpolator',
+            name='test_interpolator',
+            output='screen'
+        ),
+        Node(
+            package='trajectory',
+            executable='state_receiver',
+            name='state_receiver',
             output='screen'
         )
     ])
