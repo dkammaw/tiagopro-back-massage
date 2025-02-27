@@ -4,7 +4,7 @@
     "/opt/ros/humble/lib/python3.10/site-packages",
     "/workspace/install/lib/python3.10/site-packages"
 ],
-"cmake.sourceDirectory": "/home/darkam/Dokumente/TIAGoProWorkspace/src/test_cpp",
+"cmake.sourceDirectory": "/home/darkam/Dokumente/TIAGoProWorkspace/src/joint_interpolation",
 "files.associations": {
     "array": "cpp",
     "atomic": "cpp",

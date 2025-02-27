@@ -68,8 +68,14 @@ This repository contains all the necessary files to make the TIAGo Pro robot pla
    3. In the "PointCloud2" display section, click the "Topic" field and select the topic /filtered_cloud where the point cloud data is being published.
 
 4. Start the simulation in your workspace:
+
+   For interpolation in cartesian space:
    ```
-   ros2 launch trajectory visual_tapping.launch.py
+   ros2 launch cartesian_interpolation visual_tapping.launch.py
+   ```
+   For interpolation in joint space:
+   ```
+   ros2 launch joint_interpolation visual_tapping.launch.py
    ```
    
 
