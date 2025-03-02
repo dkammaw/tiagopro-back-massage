@@ -8,12 +8,15 @@
 #include "std_msgs/msg/float32_multi_array.hpp"
 #include <geometry_msgs/msg/pose.hpp>
 #include <tf2/LinearMath/Quaternion.h>
+#include <moveit/robot_state/robot_state.h>
 #include <vector>
 #include <cmath>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <cstdlib>  
 #include <iostream>  
-#include <thread>  
+#include <thread>
+#include "nullspace_exploration.hpp"  
+#include "fk_solver.hpp" 
 
 class IKSolver : public rclcpp::Node
 {
@@ -29,11 +32,14 @@ public:
 private:
     int id_counter = 1;
     int path_counter = 1;
-    moveit::core::RobotModelPtr robot_model_;
     moveit::core::RobotStatePtr robot_state_;
     std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group;
+    moveit::core::RobotModelConstPtr robot_model_;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_pub_;
     rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr tapping_positions_sub_;
+    const moveit::core::JointModelGroup* jmg_;
+    std::shared_ptr<FKSolver> fk_solver_;
+    std::shared_ptr<NullspaceExplorationNode> nullspace_explorer_;
 };
 
 #endif // IK_SOLVER_HPP

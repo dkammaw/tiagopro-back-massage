@@ -133,15 +133,15 @@ class BackDetector(Node):
         
         if back_points is not None:
             self.get_logger().info(f"Detected back region with {len(back_points)} points.")
-            
+            '''
             try:
                 # Start the subprocess of moving the robot towards the human
                 process = subprocess.Popen(['ros2', 'run', 'back_detection', 'move'])
-                # Wait for up to 15 seconds for the process to finish
-                process.wait(timeout=15)
+                # Wait for up to 20 seconds for the process to finish
+                process.wait(timeout=20)
             except subprocess.TimeoutExpired:
-                print("Process did not finish in 15 seconds. Continuing with other tasks.")
-            
+                print("Process did not finish in 20 seconds. Continuing with other tasks.")
+            '''
             # Calculate tapping positions
             self.calculate_tapping_positions(back_points)
         
@@ -328,7 +328,7 @@ class BackDetector(Node):
         
         # Define offsets for the rows and columns
         row_offsets = [-0.1, 0.0, 0.1]   # Vertical offsets (three rows)
-        col_offsets = [-0.05, 0.05]  # Horizontal offsets (two columns)
+        col_offsets = [-0.04, 0.04]  # Horizontal offsets (two columns)
 
         # Calculate candidate tapping positions
         tapping_positions = []

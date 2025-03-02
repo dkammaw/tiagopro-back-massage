@@ -111,7 +111,7 @@ private:
     std::shared_ptr<NullspaceExplorationNode> nullspace_explorer_;
     std::vector<geometry_msgs::msg::Pose> tapping_positions;
     bool tapping_positions_ready = false;
-    // Mutex und Bedingungsvariable für Synchronisation
+    // Mutex and Condition Variable for Synchronization
     std::mutex mutex_;
     std::condition_variable cv_;
     rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr tapping_sub_;

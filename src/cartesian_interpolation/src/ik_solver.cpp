@@ -14,9 +14,12 @@ IKSolver::IKSolver() : Node("ik_solver")
 // Initialize parameters for the node
 void IKSolver::initialize_move_group()
 {
+    nullspace_explorer_ = std::make_shared<NullspaceExplorationNode>();
+    fk_solver_ = std::make_shared<FKSolver>(this->shared_from_this());
     move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(this->shared_from_this(), "arm_left");
-    robot_model_ = std::const_pointer_cast<moveit::core::RobotModel>(move_group->getRobotModel());
+    robot_model_ = move_group->getRobotModel();
     robot_state_ = std::make_shared<moveit::core::RobotState>(robot_model_);
+    jmg_ = robot_model_->getJointModelGroup("arm_left");
 }
 
 void IKSolver::tapping_positions_callback(const std_msgs::msg::Float32MultiArray::SharedPtr msg)
@@ -115,39 +118,27 @@ void IKSolver::plan_cartesian_path(geometry_msgs::msg::Pose start_pose, geometry
     RCLCPP_INFO(this->get_logger(), "Visualizing Cartesian path (%.2f%% achieved)", fraction * 100.0);
     
     publish_markers(waypoints);
+
+    moveit::core::RobotState end_state(robot_model_);
     
     // Execute the planned trajectory
     moveit::planning_interface::MoveGroupInterface::Plan plan;
-    plan.trajectory_ = trajectory;
+    plan.trajectory_ = trajectory; 
+
+    std::vector<double> planned_joint_values = plan.trajectory_.joint_trajectory.points.back().positions;
+    
+    end_state.setJointGroupPositions(jmg_, planned_joint_values);
+    end_state.update();
+
+    std::vector<double> best_config_vec = nullspace_explorer_->explore(end_state);
+
     move_group->execute(plan);
 
+    // Solve FK to the best found configuration
+    fk_solver_->execute_trajectory(best_config_vec);
+
+
     RCLCPP_INFO(this->get_logger(), "Trajectory executed successfully!");
-    
-    // WAIT for 3 seconds before continueing with nullspace exploration
-    rclcpp::sleep_for(std::chrono::seconds(3));
-
-    RCLCPP_INFO(this->get_logger(), "Continuing after 3-second pause with nullspace exploration...");
-
-    // Call the Nullspace Exploration node synchronously by using a std::thread and joining it
-    std::thread nullspace_thread(&IKSolver::call_nullspace_exploration_node, this);
-
-    // Wait for the nullspace exploration node subprocess to finish before continuing
-    nullspace_thread.join();  // This will block until the subprocess finishes
-}
-
-void IKSolver::call_nullspace_exploration_node()
-{
-    RCLCPP_INFO(this->get_logger(), "Launching the nullspace exploration node...");
-
-    // Launch the nullspace_exploration node using ros2 launch as a subprocess
-    int result = std::system("ros2 launch cartesian_interpolation nullspace_explorer.launch.py");
-
-    // Wait until the subprocess finishes before proceeding
-    if (result == 0) {
-        RCLCPP_INFO(this->get_logger(), "Nullspace exploration node finished successfully.");
-    } else {
-        RCLCPP_ERROR(this->get_logger(), "Nullspace exploration node failed.");
-    }
 }
 
 
