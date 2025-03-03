@@ -92,12 +92,9 @@ geometry_msgs::msg::Pose IKSolver::interpolate_pose(const geometry_msgs::msg::Po
 }
 
 void IKSolver::plan_cartesian_path(geometry_msgs::msg::Pose start_pose, geometry_msgs::msg::Pose target_pose, bool interpolate_orientation) {
-
-    std::vector<geometry_msgs::msg::Pose> waypoints;
-
-    waypoints.push_back(start_pose);
-    
     // Interpolation between start and goal pose with 5 waypoints
+    std::vector<geometry_msgs::msg::Pose> waypoints;
+    waypoints.push_back(start_pose);
     int num_steps = 5;
     for (int i = 1; i <= num_steps; ++i) {
         // Falls die Orientierung nach dem ersten Schritt nicht mehr verändert werden soll
@@ -106,37 +103,28 @@ void IKSolver::plan_cartesian_path(geometry_msgs::msg::Pose start_pose, geometry
 
         waypoints.push_back(interpolated_pose);
     }
-    
     waypoints.push_back(target_pose);
 
-    // Compute Trajectory
+    // Compute Linear Interpolation Trajectory
     moveit_msgs::msg::RobotTrajectory trajectory;
     const double jump_threshold = 0.0;
     const double eef_step = 0.002;
     double fraction = move_group->computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
-
     RCLCPP_INFO(this->get_logger(), "Visualizing Cartesian path (%.2f%% achieved)", fraction * 100.0);
-    
     publish_markers(waypoints);
-
-    moveit::core::RobotState end_state(robot_model_);
     
-    // Execute the planned trajectory
+    // Start nullspace exploration from the end state of the previous trajectory
     moveit::planning_interface::MoveGroupInterface::Plan plan;
     plan.trajectory_ = trajectory; 
-
     std::vector<double> planned_joint_values = plan.trajectory_.joint_trajectory.points.back().positions;
-    
+    moveit::core::RobotState end_state(robot_model_);
     end_state.setJointGroupPositions(jmg_, planned_joint_values);
     end_state.update();
-
     std::vector<double> best_config_vec = nullspace_explorer_->explore(end_state);
-
+    
+    // Execute both trajectories
     move_group->execute(plan);
-
-    // Solve FK to the best found configuration
     fk_solver_->execute_trajectory(best_config_vec);
-
 
     RCLCPP_INFO(this->get_logger(), "Trajectory executed successfully!");
 }

@@ -12,6 +12,9 @@ void FKSolver::execute_trajectory(const std::vector<double>& joint_positions)
     
     move_group_.setJointValueTarget(joint_positions);
 
+    move_group_.setMaxVelocityScalingFactor(1.0);  
+    move_group_.setMaxAccelerationScalingFactor(1.0);
+    
     // Plan the trajectory
     moveit::planning_interface::MoveGroupInterface::Plan plan;
     bool success = (move_group_.plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);

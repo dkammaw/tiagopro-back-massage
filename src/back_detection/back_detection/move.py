@@ -10,7 +10,7 @@ class MoveExactDistance(Node):
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
 
         self.initial_x = None
-        self.target_distance = 0.84  # Drive in x direction (destination similar as projection of the back)
+        self.target_distance = 0.83  # Drive in x direction (destination similar as projection of the back)
         self.speed = 0.25  # velocity in m/s
 
     def odom_callback(self, msg):
