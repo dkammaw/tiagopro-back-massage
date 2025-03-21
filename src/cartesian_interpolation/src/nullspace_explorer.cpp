@@ -39,7 +39,7 @@ std::vector<double> NullspaceExplorationNode::explore(moveit::core::RobotState& 
     }
 
     Eigen::VectorXd best_config = Eigen::Map<Eigen::VectorXd>(joint_values.data(), joint_values.size());
-
+    RCLCPP_INFO_STREAM(get_logger(), "Initial configuration: \n" << best_config);
     // Start the recursive nullspace exploration
     best_config = recursiveNullspaceExploration(current_state, jmg_, kinematics_metrics_, manipulability_index, best_config);
 
@@ -61,6 +61,7 @@ Eigen::MatrixXd computeNullspace(const moveit::core::RobotState& robot_state,
         RCLCPP_ERROR(rclcpp::get_logger("nullspace_exploration"), "Failed to compute Jacobian.");
         return Eigen::MatrixXd::Zero(jmg->getVariableCount(), jmg->getVariableCount());
     }
+    RCLCPP_INFO_STREAM(rclcpp::get_logger("nullspace_exploration"), "Jacobian: \n" << full_jacobian << "\n");
 
     Eigen::JacobiSVD<Eigen::MatrixXd> svd(full_jacobian, Eigen::ComputeFullU | Eigen::ComputeFullV);
     Eigen::Index rank = svd.rank();
@@ -70,9 +71,16 @@ Eigen::MatrixXd computeNullspace(const moveit::core::RobotState& robot_state,
     {
         RCLCPP_WARN(rclcpp::get_logger("nullspace_exploration"), "No nullspace available.");
         return Eigen::MatrixXd::Zero(jmg->getVariableCount(), 1);
+    } else {
+        // Log the components of the SVD
+        RCLCPP_INFO_STREAM(rclcpp::get_logger("nullspace_exploration"), "U (Left Singular Vectors): \n" << svd.matrixU() << "\n");
+        RCLCPP_INFO_STREAM(rclcpp::get_logger("nullspace_exploration"), "Singular Values: \n" << svd.singularValues() << "\n");
+        RCLCPP_INFO_STREAM(rclcpp::get_logger("nullspace_exploration"), "V (Right Singular Vectors): \n" << svd.matrixV() << "\n");
+        RCLCPP_INFO(rclcpp::get_logger("nullspace_exploration"), "Nullspace available with dimension: %zu", ns_dim);
     }
 
     Eigen::MatrixXd nullspace = svd.matrixV().rightCols(ns_dim);
+    RCLCPP_INFO_STREAM(rclcpp::get_logger("nullspace_exploration"), "Right Columns of Nullspace: \n" << nullspace<< "\n");
     return nullspace;
 }
 
@@ -134,7 +142,7 @@ Eigen::VectorXd gridSearch(moveit::core::RobotState& robot_state,
 
             robot_state.updateLinkTransforms();
             bool new_success = kinematics_metrics->getManipulabilityIndex(robot_state, jmg, manipulability_index, false);
-            // RCLCPP_INFO(rclcpp::get_logger("nullspace_exploration"), "Current Manipulability Index: %f", manipulability_index);
+            RCLCPP_INFO(rclcpp::get_logger("nullspace_exploration"), "Current Manipulability Index: %f", manipulability_index);
             if (!new_success)
                 continue;
 
@@ -144,11 +152,11 @@ Eigen::VectorXd gridSearch(moveit::core::RobotState& robot_state,
                 best_manipulability = manipulability_index;
                 best_config = new_config;
 
-                // RCLCPP_INFO(rclcpp::get_logger("nullspace_exploration"), "New best manipulability index: %f", best_manipulability);
+                RCLCPP_INFO(rclcpp::get_logger("nullspace_exploration"), "New best manipulability index: %f", best_manipulability);
             }
         }
     }
 
-    // RCLCPP_INFO(rclcpp::get_logger("nullspace_exploration"), "Best configuration found with highest manipulability index: %f", best_manipulability);
+    RCLCPP_INFO(rclcpp::get_logger("nullspace_exploration"), "Best configuration found with highest manipulability index: %f", best_manipulability);
     return best_config;
 }

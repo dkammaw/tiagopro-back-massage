@@ -124,10 +124,11 @@ class BackDetector(Node):
         """
         # Apply heuristic to extract back (e.g., points with vertical alignment)
         back_points = self.filter_vertical_points(self.point_cloud)
-        
-        # Select largest cluster (which is the Back)
+        #self.parameter_selection(back_points)
+        #Select largest cluster (which is the Back)
         back_points = self.get_largest_cluster(back_points)
         
+        '''
         # Publish the processed point cloud
         self.publish_processed_pointcloud(back_points)
         
@@ -147,7 +148,7 @@ class BackDetector(Node):
         
         else:
             self.get_logger().info("No back points detected.")
-        
+        '''
 
         
     def filter_vertical_points(self, points):
@@ -189,41 +190,9 @@ class BackDetector(Node):
         
         return filtered_points
 
-
-    def get_largest_cluster(self, points):
-        """
-        Remove noise and outlier points by clustering and selecting the largest cluster (the back).
-        """
-        # Function to select the eps-parameter
-        # self.paramter_selection(back_points)
-                
-        # Cluster the points
-        clustering = DBSCAN(eps=0.065, min_samples=2000).fit(points)
-        labels = clustering.labels_
-
-        # Calculate the cluster sizes
-        unique_labels, counts = np.unique(labels, return_counts=True)
-
-        # Remove the label -1 (noise)
-        valid_counts = counts[unique_labels != -1]
-        valid_labels = unique_labels[unique_labels != -1]
-
-        # Check for valid clusters
-        if len(valid_counts) == 0:
-            self.get_logger().info("No valid clusters found.")
-            return np.array([])
-
-        # Find the largest cluster
-        largest_cluster_label = valid_labels[np.argmax(valid_counts)]
-        largest_cluster_points = points[labels == largest_cluster_label]
-
-        # self.visualize_clusters_3d(points, labels)
-        
-        return largest_cluster_points
-    
-    def paramter_selection(self, points):
+    def parameter_selection(self, points):
         X = points
-        k = 2000  # Choose MinPts
+        k = 1000  # Choose MinPts
         
         neigh = NearestNeighbors(n_neighbors=k)
         neigh.fit(X)
@@ -232,42 +201,87 @@ class BackDetector(Node):
         # Sort distances of k-th nearest neighbor
         distances = np.sort(distances[:, k-1], axis=0)
 
-        # Apply KneeLocator to find the elbow point
-        kneedle = KneeLocator(np.arange(len(distances)), distances, curve="convex", direction="increasing")
+        # Erste Ableitung berechnen
+        first_derivative = np.diff(distances)
 
-        # Plot
-        plt.plot(distances, label=f"{k}-th Nearest Neighbor Distance")
-        if kneedle.knee:
-            plt.axvline(x=kneedle.knee, color='r', linestyle="--", label=f"Elbow at {kneedle.knee_y:.3f}")
+        # Stelle finden, wo die Steigung stark zunimmt
+        elbow_index = np.argmax(first_derivative > np.percentile(first_derivative, 95))
+
+        # Optimalen Epsilon-Wert festlegen
+        optimal_eps = distances[elbow_index]
+
+        # Plot mit eingezeichneter "Elbow"-Linie
+        plt.figure(figsize=(8, 6))
+        plt.plot(distances, marker="o", linestyle="-", label=f"{k}-th Nearest Neighbor Distance")
+        plt.axvline(x=elbow_index, color='r', linestyle="--", label=f"Elbow at {optimal_eps:.3f}")
 
         plt.xlabel("Points sorted by distance")
         plt.ylabel(f"{k}-th Nearest Neighbor Distance")
-        plt.title("Elbow Method for Optimal Epsilon")
+        plt.title("k-Distance Plot with Manual Elbow")
         plt.legend()
         plt.show()
 
-        print(f"Optimal Epsilon (eps) estimated by Kneedle: {kneedle.knee_y:.3f}")
+        print(f"Optimal Epsilon (eps) estimated manually: {optimal_eps:.3f}")
 
-    def visualize_clusters_3d(self, points, labels):
+
+        print(f"Optimal Epsilon (eps) estimated by Kneedle: {optimal_eps:.3f}")
+
+    def get_largest_cluster(self, points):
         """
-        Visualizes clusters in 3D using Matplotlib.
+        Cluster all points and highlight the largest cluster.
         """
+        # Cluster the points
+        clustering = DBSCAN(eps=0.038, min_samples=1000).fit(points)
+        labels = clustering.labels_
+
+        # Berechne Clustergrößen
+        unique_labels, counts = np.unique(labels, return_counts=True)
+
+        # Entferne Noise (-1)
+        valid_counts = counts[unique_labels != -1]
+        valid_labels = unique_labels[unique_labels != -1]
+
+        if len(valid_counts) == 0:
+            self.get_logger().info("No valid clusters found.")
+            return np.array([])
+
+        # Bestimme das größte Cluster
+        largest_cluster_label = valid_labels[np.argmax(valid_counts)]
+        
+        # Visualisierung aller Cluster mit Hervorhebung des größten
+        self.visualize_clusters_3d(points, labels, largest_cluster_label)
+
+        return points, labels, largest_cluster_label  # Alle Punkte und Labels zurückgeben
+
+    def visualize_clusters_3d(self, points, labels, largest_cluster_label):
+        """
+        3D-Visualisierung aller Cluster mit Hervorhebung des größten.
+        """
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111, projection="3d")
+
         unique_labels = np.unique(labels)
-        colors = plt.cm.jet(np.linspace(0, 1, len(unique_labels)))
 
-        fig = plt.figure(figsize=(10, 7))
-        ax = fig.add_subplot(111, projection='3d')
+        for label in unique_labels:
+            cluster_points = points[labels == label]
 
-        for label, color in zip(unique_labels, colors):
-            mask = labels == label
-            ax.scatter(points[mask, 0], points[mask, 1], points[mask, 2], c=[color], label=f"Cluster {label}" if label != -1 else "Noise", s=1)
+            if label == -1:
+                color, marker, alpha, size = "black", "x", 0.1, 10  # Noise
+            elif label == largest_cluster_label:
+                color, marker, alpha, size = "red", "o", 1.0, 50  # Largest cluster
+            else:
+                color, marker, alpha, size = np.random.rand(3,), "o", 0.6, 20  # Other clusters
 
-        ax.set_xlabel("X-Axis")
-        ax.set_ylabel("Y-Axis")
-        ax.set_zlabel("Z-Axis")
-        ax.set_title("DBSCAN Clustering (3D)")
-        plt.legend(markerscale=5)
+            ax.scatter(cluster_points[:, 0], cluster_points[:, 1], cluster_points[:, 2], 
+                    c=[color], marker=marker, alpha=alpha, s=size, label=f"Cluster {label}")
+
+        ax.set_xlabel("X")
+        ax.set_ylabel("Y")
+        ax.set_zlabel("Z")
+        plt.title("3D Cluster Visualization")
+        plt.legend()
         plt.show()
+
 
 
     def publish_processed_pointcloud(self, points):
