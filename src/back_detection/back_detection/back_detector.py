@@ -230,7 +230,7 @@ class BackDetector(Node):
         Cluster all points and highlight the largest cluster.
         """
         # Cluster the points
-        clustering = DBSCAN(eps=0.038, min_samples=1000).fit(points)
+        clustering = DBSCAN(eps=0.065, min_samples=2000).fit(points)
         labels = clustering.labels_
 
         # Berechne Clustergrößen
