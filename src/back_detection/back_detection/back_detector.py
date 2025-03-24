@@ -128,7 +128,6 @@ class BackDetector(Node):
         #Select largest cluster (which is the Back)
         back_points = self.get_largest_cluster(back_points)
         
-        '''
         # Publish the processed point cloud
         self.publish_processed_pointcloud(back_points)
         
@@ -148,7 +147,7 @@ class BackDetector(Node):
         
         else:
             self.get_logger().info("No back points detected.")
-        '''
+        
 
         
     def filter_vertical_points(self, points):
